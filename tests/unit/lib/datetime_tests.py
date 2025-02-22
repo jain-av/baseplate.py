@@ -11,7 +11,7 @@ from baseplate.lib.datetime import (
     get_utc_now,
 )
 
-EXAMPLE_DATETIME = datetime.utcnow().replace(tzinfo=timezone.utc, microsecond=0)
+EXAMPLE_DATETIME = datetime.now(timezone.utc).replace(microsecond=0)
 
 
 class DatetimeTests(unittest.TestCase):
