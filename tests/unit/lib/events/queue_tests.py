@@ -6,7 +6,7 @@ from baseplate.lib.message_queue import MessageQueue, TimedOutError
 
 
 class EventQueueTests(unittest.TestCase):
-    @mock.patch("baseplate.lib.events.MessageQueue", autospec=MessageQueue)
+    @mock.patch("baseplate.lib.events.MessageQueue", autospec=True)
     def setUp(self, MessageQueue):
         self.message_queue = MessageQueue.return_value
         self.mock_serializer = mock.Mock()
