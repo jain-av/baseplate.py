@@ -72,7 +72,7 @@ class ClientSpanObserverTests(unittest.TestCase):
 
         observer = MetricsClientSpanObserver(mock_batch, mock_client_span)
         self.assertEqual(mock_batch.timer.call_count, 1)
-        self.assertEqual(mock_batch.timer.call_args, mock.call("clients.example"))
+        mock_batch.timer.assert_called_with("clients.example")
 
         observer.on_start()
         self.assertEqual(mock_timer.start.call_count, 1)
@@ -88,7 +88,7 @@ class ClientSpanObserverTests(unittest.TestCase):
         mock_counter.reset_mock()
         observer.on_log(name="error.object", payload=TestException())
         self.assertEqual(mock_counter.increment.call_count, 1)
-        self.assertEqual(mock_batch.counter.call_args, mock.call("errors.TestException"))
+        mock_batch.counter.assert_called_with("errors.TestException")
 
 
 class LocalSpanObserverTests(unittest.TestCase):
@@ -105,7 +105,7 @@ class LocalSpanObserverTests(unittest.TestCase):
 
         observer = MetricsLocalSpanObserver(mock_batch, mock_local_span)
         self.assertEqual(mock_batch.timer.call_count, 1)
-        self.assertEqual(mock_batch.timer.call_args, mock.call("some_component.example"))
+        mock_batch.timer.assert_called_with("some_component.example")
 
         observer.on_start()
         self.assertEqual(mock_timer.start.call_count, 1)

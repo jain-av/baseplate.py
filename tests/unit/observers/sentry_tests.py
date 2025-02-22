@@ -10,6 +10,7 @@ from baseplate.observers.sentry import (
     _SentryUnhandledErrorReporter,
     init_sentry_client_from_config,
 )
+from sqlalchemy import Connection, create_engine, insert, select, update
 
 
 class FakeTransport:
