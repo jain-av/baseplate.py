@@ -53,14 +53,14 @@ class NoReassignmentChecker(BaseChecker):
     # List of available nodes: https://astroid.readthedocs.io/en/latest/api/astroid.nodes.html
 
     # Visit the Assign node: https://astroid.readthedocs.io/en/latest/api/astroid.nodes.html#astroid.nodes.Assign
-    def visit_assign(self, node: nodes) -> None:
+    def visit_assign(self, node: nodes.Assign) -> None:
         for variable in node.targets:
-            if variable.name not in self.variables:
-                self.variables.add(variable.name)
-            else:
-                self.add_message("non-unique-variable", node=node)
+            if isinstance(variable, nodes.AssignName):
+                if variable.name not in self.variables:
+                    self.variables.add(variable.name)
+                else:
+                    self.add_message("reassigned-variable", node=node)
 
     # Leave the FunctionDef node: https://astroid.readthedocs.io/en/latest/api/astroid.nodes.html#astroid.nodes.FunctionDef
-    def leave_functiondef(self, node: nodes) -> nodes:
+    def leave_functiondef(self, node: nodes.FunctionDef) -> None:
         self.variables = set()
-        return node
