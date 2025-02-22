@@ -1,6 +1,7 @@
 from baseplate import Span
 from baseplate.clients import ContextFactory
 from baseplate.lib.ratelimit.backends import RateLimitBackend
+from sqlalchemy import exc
 
 
 class RateLimitExceededException(Exception):
@@ -67,5 +68,11 @@ class RateLimiter:
         :param amount: The amount to consume from the rate limit bucket.
 
         """
-        if not self.backend.consume(key, amount, self.allowance, self.interval):
-            raise RateLimitExceededException("Rate limit exceeded.")
+        try:
+            if not self.backend.consume(key, amount, self.allowance, self.interval):
+                raise RateLimitExceededException("Rate limit exceeded.")
+        except exc.SQLAlchemyError as e:
+            # in the event that the database is unavailable, we want to raise a RateLimitExceededException
+            # to prevent the service from crashing.
+            raise RateLimitExceededException(f"Rate limit consume failed due to database error: {e}")
+
