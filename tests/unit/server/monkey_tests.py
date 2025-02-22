@@ -14,11 +14,11 @@ class MonkeyPatchTests(unittest.TestCase):
         gevent.monkey.saved.clear()
 
     def test_patch_stdlib_queues(self):
-        assert queue.LifoQueue is not gevent.queue.LifoQueue
+        self.assertIs(queue.LifoQueue is not gevent.queue.LifoQueue, True)
         patch_stdlib_queues()
-        assert queue.LifoQueue is gevent.queue.LifoQueue
+        self.assertIs(queue.LifoQueue is gevent.queue.LifoQueue, True)
 
     def test_is_gevent_patched(self):
-        assert not gevent_is_patched()
+        self.assertIs(gevent_is_patched(), False)
         patch_stdlib_queues()
-        assert gevent_is_patched()
+        self.assertIs(gevent_is_patched(), True)
