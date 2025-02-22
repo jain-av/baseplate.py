@@ -2,7 +2,7 @@ from redis import ConnectionPool
 
 from baseplate import Span
 from baseplate.clients import ContextFactory
-from baseplate.clients.redis import MonitoredRedisConnection, RedisContextFactory
+from baseplate.clients.redis import MonitoredRedis, RedisContextFactory
 from baseplate.lib.ratelimit.backends import RateLimitBackend, _get_current_bucket
 
 
@@ -36,7 +36,7 @@ class RedisRateLimitBackend(RateLimitBackend):
 
     """
 
-    def __init__(self, redis: MonitoredRedisConnection, prefix: str = "rl:"):
+    def __init__(self, redis: MonitoredRedis, prefix: str = "rl:"):
         self.redis = redis
         self.prefix = prefix
 
