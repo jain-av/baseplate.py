@@ -34,7 +34,7 @@ intersphinx_mapping = {
     "kazoo": ("https://kazoo.readthedocs.io/en/latest/", None),
     "kombu": ("https://kombu.readthedocs.io/en/latest/", None),
     "redis": ("https://redis-py.readthedocs.io/en/latest/", None),
-    "sqlalchemy": ("https://docs.sqlalchemy.org/en/13/", None),
+    "sqlalchemy": ("https://docs.sqlalchemy.org/en/20/", None),
     "requests": ("https://requests.readthedocs.io/en/stable/", None),
     "sentry_sdk": ("https://getsentry.github.io/sentry-python/", None),
 }
