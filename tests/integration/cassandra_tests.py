@@ -47,7 +47,7 @@ class CassandraTests(unittest.TestCase):
 
     def test_simple_query(self):
         with self.server_span:
-            self.context.cassandra.execute("SELECT * FROM system.local;")
+            self.context.cassandra.execute(statement="SELECT * FROM system.local;")
 
         server_span_observer = self.baseplate_observer.get_only_child()
         span_observer = server_span_observer.get_only_child()
@@ -59,7 +59,7 @@ class CassandraTests(unittest.TestCase):
     def test_error_in_query(self):
         with self.server_span:
             with self.assertRaises(InvalidRequest):
-                self.context.cassandra.execute("SELECT * FROM does_not_exist;")
+                self.context.cassandra.execute(statement="SELECT * FROM does_not_exist;")
 
         server_span_observer = self.baseplate_observer.get_only_child()
         span_observer = server_span_observer.get_only_child()
@@ -69,7 +69,7 @@ class CassandraTests(unittest.TestCase):
 
     def test_async(self):
         with self.server_span:
-            future = self.context.cassandra.execute_async("SELECT * FROM system.local;")
+            future = self.context.cassandra.execute_async(statement="SELECT * FROM system.local;")
             future.result()
 
         server_span_observer = self.baseplate_observer.get_only_child()
@@ -92,7 +92,7 @@ class CassandraTests(unittest.TestCase):
     def test_prepared_statements(self):
         with self.server_span:
             statement = self.context.cassandra.prepare("SELECT * FROM system.local;")
-            self.context.cassandra.execute(statement)
+            self.context.cassandra.execute(statement=statement)
 
     def test_async_callback_fail(self):
         # mock threading.Event so that Event.wait() returns immediately
@@ -113,7 +113,7 @@ class CassandraTests(unittest.TestCase):
         self.addCleanup(on_execute_complete.stop)
 
         with self.server_span:
-            future = self.context.cassandra.execute_async("SELECT * FROM system.local;")
+            future = self.context.cassandra.execute_async(statement="SELECT * FROM system.local;")
             future.result()
 
         server_span_observer = self.baseplate_observer.get_only_child()
@@ -134,7 +134,7 @@ class CassandraTests(unittest.TestCase):
         self.addCleanup(on_execute_complete.stop)
 
         with self.server_span:
-            future = self.context.cassandra.execute_async("SELECT * FROM system.local;")
+            future = self.context.cassandra.execute_async(statement="SELECT * FROM system.local;")
             future.result()
 
         server_span_observer = self.baseplate_observer.get_only_child()
@@ -155,7 +155,7 @@ class CassandraTests(unittest.TestCase):
         self.addCleanup(on_execute_complete.stop)
 
         with self.server_span:
-            future = self.context.cassandra.execute_async("SELECT * FROM system.local;")
+            future = self.context.cassandra.execute_async(statement="SELECT * FROM system.local;")
             future.result()
 
         server_span_observer = self.baseplate_observer.get_only_child()
@@ -186,7 +186,7 @@ class CassandraConcurrentTests(unittest.TestCase):
         with self.server_span:
             statement = self.context.cassandra.prepare('SELECT * FROM system.local WHERE "key"=?')
             params = [(_key,) for _key in ["local", "other"]]
-            results = execute_concurrent_with_args(self.context.cassandra, statement, params)
+            results = execute_concurrent_with_args(self.context.cassandra, statement, parameters=params)
 
         server_span_observer = self.baseplate_observer.get_only_child()
         self.assertEqual(len(server_span_observer.children), 3)

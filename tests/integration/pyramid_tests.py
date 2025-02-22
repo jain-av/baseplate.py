@@ -13,6 +13,8 @@ try:
     import webtest
     from pyramid.config import Configurator
     from pyramid.httpexceptions import HTTPInternalServerError
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
     from baseplate.frameworks.pyramid import (
         BaseplateConfigurator,
@@ -264,21 +266,6 @@ class ConfiguratorTests(TestBase):
         self.assertNotEqual(child_span.context, context)
 
     def test_streaming_response(self):
-        class StreamingTestResponse(webtest.TestResponse):
-            def decode_content(self):
-                # keep your grubby hands off the app_iter, webtest!!!!
-                pass
-
-            @property
-            def body(self):
-                # seriously
-                pass
-
-        class StreamingTestRequest(webtest.TestRequest):
-            ResponseClass = StreamingTestResponse
-
-        self.test_app.RequestClass = StreamingTestRequest
-
         response = self.test_app.get("/example?stream")
 
         # ok, we've returned from the wsgi app but the iterator's not done

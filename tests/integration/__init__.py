@@ -5,6 +5,7 @@ import unittest
 from baseplate import BaseplateObserver, SpanObserver
 from baseplate.lib.config import Endpoint
 from baseplate.lib.edgecontext import EdgeContextFactory
+from sqlalchemy import exc
 
 
 def get_endpoint_or_skip_container(name, default_port):
@@ -25,6 +26,8 @@ def get_endpoint_or_skip_container(name, default_port):
         sock.settimeout(0.1)
         sock.connect(endpoint.address)
     except OSError:
+        raise unittest.SkipTest(f"could not find {name} server for integration tests")
+    except exc.OperationalError:
         raise unittest.SkipTest(f"could not find {name} server for integration tests")
     else:
         sock.close()
