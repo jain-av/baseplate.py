@@ -18,6 +18,8 @@ from baseplate.lib.secrets import (
     VaultCSISecretsStore,
     secrets_store_from_config,
 )
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
 SecretType: typing_extensions.TypeAlias = dict[str, any]
 
@@ -260,8 +262,8 @@ class StoreTests(unittest.TestCase):
     def test_invalid_secret_raises(self):
         self.csi_dir.joinpath("..data").resolve()
         secrets_store = get_secrets_store(str(self.csi_dir))
-        with pytest.raises(SecretNotFoundError):
+        with self.assertRaises(SecretNotFoundError):
             secrets_store.get_credentials("secret/example-service/does-not-exist")
         # While cache is updating we should still fail
-        with pytest.raises(SecretNotFoundError):
+        with self.assertRaises(SecretNotFoundError):
             secrets_store.get_credentials("secret/example-service/does-not-exist")
