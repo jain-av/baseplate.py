@@ -4,6 +4,7 @@ from typing import Optional
 
 from kazoo.client import KazooClient
 from kazoo.handlers.gevent import SequentialGeventHandler
+from sqlalchemy import util
 
 from baseplate.lib import config
 from baseplate.lib.secrets import SecretsStore
@@ -83,11 +84,9 @@ def zookeeper_client_from_config(
         # connection. so even though we do infinite retries here, users of this
         # function can configure the amount of time they are willing to wait
         # for initial connection.
-        connection_retry={
-            "max_tries": -1,  # keep reconnecting forever
-            "delay": 0.1,  # initial delay
-            "backoff": 2,  # exponential backoff
-            "max_jitter": 1,  # maximum amount to jitter sleeptimes
-            "max_delay": 60,  # never wait longer than this
-        },
+        retry_attempts=util.NoneForInteger(-1),  # keep reconnecting forever
+        retry_delay=0.1,  # initial delay
+        retry_backoff=2,  # exponential backoff
+        retry_max_jitter=1,  # maximum amount to jitter sleeptimes
+        retry_max_delay=60,  # never wait longer than this
     )
