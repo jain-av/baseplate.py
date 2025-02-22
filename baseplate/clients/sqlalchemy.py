@@ -92,8 +92,7 @@ def engine_from_config(
         if hasattr(url, "set"):
             url = url.set(username=credentials.username, password=credentials.password)
         else:
-            url.username = credentials.username
-            url.password = credentials.password
+            url = url.set(username=credentials.username, password=credentials.password)
 
     return create_engine(url, **kwargs)
 
@@ -333,7 +332,7 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
 
     def make_object_for_context(self, name: str, span: Span) -> Session:
         engine = typing.cast(Engine, super().make_object_for_context(name, span))
-        session = Session(bind=engine)
+        session = Session(engine)
         span.register(SQLAlchemySessionSpanObserver(session))
         return session
 

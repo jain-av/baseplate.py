@@ -329,11 +329,8 @@ def _build_thrift_proxy_method(name: str) -> Callable[..., Any]:
                         except Error as exc:
                             # a 5xx error is an unexpected exception but not 5xx are
                             # not.
-                            if 500 <= exc.code < 600:
-                                span.finish(exc_info=sys.exc_info())
-                                otelspan.set_status(status.Status(status.StatusCode.ERROR))
-                            else:
-                                span.finish()
+                            otelspan.set_status(status.Status(status.StatusCode.ERROR) if 500 <= exc.code < 600 else status.Status(status.StatusCode.OK))
+                            span.finish(exc_info=sys.exc_info())
                             raise
                         except TException:
                             # this is an expected exception, as defined in the IDL
@@ -396,7 +393,7 @@ def _build_thrift_proxy_method(name: str) -> Callable[..., Any]:
                                 # (but not eliminate) the possibility of metric
                                 # explosion, we validate it against the
                                 # expected type for a proper Error code.
-                                if isinstance(current_exc.code, int):
+                                if isinstance(getattr(current_exc, "code", None), int):
                                     baseplate_status_code = str(current_exc.code)
                                     baseplate_status = ErrorCode()._VALUES_TO_NAMES.get(
                                         current_exc.code, ""

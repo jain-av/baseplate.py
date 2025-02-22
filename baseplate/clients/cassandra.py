@@ -32,6 +32,9 @@ from baseplate.lib import config
 from baseplate.lib.prometheus_metrics import default_latency_buckets
 from baseplate.lib.secrets import SecretsStore
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session as ORMSession
+
 
 class CassandraPrometheusLabels(NamedTuple):
     cassandra_client_name: str

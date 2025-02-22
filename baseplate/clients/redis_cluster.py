@@ -4,9 +4,9 @@ from datetime import timedelta
 from time import perf_counter
 from typing import Any, Optional
 
-import rediscluster
+import redis.cluster  # Changed import
 from redis import RedisError
-from rediscluster.pipeline import ClusterPipeline
+from redis.cluster.pipeline import ClusterPipeline  # Changed import
 
 from baseplate import Span
 from baseplate.clients import ContextFactory
@@ -134,7 +134,7 @@ class HotKeyTracker:
 
     def __init__(
         self,
-        redis_client: rediscluster.RedisCluster,
+        redis_client: redis.cluster.RedisCluster,  # Changed typehint
         track_reads_sample_rate: float,
         track_writes_sample_rate: float,
     ):
@@ -166,9 +166,9 @@ class HotKeyTracker:
             return
 
         try:
-            with self.redis_client.pipeline(set_name) as pipe:
+            with self.redis_client.pipeline(transaction=True) as pipe:  # Removed set_name parameter, added transaction=True
                 for key in key_list:
-                    pipe.zincrby(set_name, 1, key)
+                    pipe.zincrby(set_name, key, 1)  # swapped key and increment
                 # Reset the TTL for the sorted set
                 pipe.expire(set_name, timedelta(hours=24))
                 pipe.execute()
@@ -233,6 +233,251 @@ class ClusterWithReadReplicasBlockingConnectionPool(rediscluster.ClusterBlocking
 def cluster_pool_from_config(
     app_config: config.RawConfig, prefix: str = "rediscluster.", **kwargs: Any
 ) -> rediscluster.ClusterConnectionPool:
+    """Make a ClusterConnectionPool from a configuration dictionary.
+
+    The keys useful to :py:func:`cluster_pool_from_config` should be prefixed, e.g.
+    ``rediscluster.url``, ``rediscluster.max_connections``, etc. The ``prefix`` argument
+    specifies the prefix used to filter keys.  Each key is mapped to a
+    corresponding keyword argument on the :py:class:`rediscluster.ClusterConnectionPool`
+    constructor.
+
+    Supported keys:
+
+import logging
+import random
+from datetime import timedelta
+from time import perf_counter
+from typing import Any, Optional
+
+import redis.cluster  # Changed import
+from redis import RedisError
+from redis.cluster.pipeline import ClusterPipeline  # Changed import
+
+from baseplate import Span
+from baseplate.clients import ContextFactory
+from baseplate.clients.redis import (
+    ACTIVE_REQUESTS,
+    LATENCY_SECONDS,
+    MAX_CONNECTIONS,
+    OPEN_CONNECTIONS,
+    PROM_LABELS_PREFIX,
+    REQUESTS_TOTAL,
+)
+from baseplate.lib import config, metrics
+
+logger = logging.getLogger(__name__)
+randomizer = random.SystemRandom()
+
+
+# Read commands that take a single key as their first parameter
+SINGLE_KEY_READ_COMMANDS = frozenset(
+    [
+        "BITCOUNT",
+        "BITPOS",
+        "GEODIST",
+        "GEOHASH",
+        "GEOPOS",
+        "GEORADIUS",
+        "GEORADIUSBYMEMBER",
+        "GET",
+        "GETBIT",
+        "GETRANGE",
+        "HEXISTS",
+        "HGET",
+        "HGETALL",
+        "HKEYS",
+        "HLEN",
+        "HMGET",
+        "HSTRLEN",
+        "HVALS",
+        "LINDEX",
+        "LLEN",
+        "LRANGE",
+        "PTTL",
+        "SCARD",
+        "SISMEMBER",
+        "SMEMBERS",
+        "SRANDMEMBER",
+        "STRLEN",
+        "TTL",
+        "ZCARD",
+        "ZCOUNT",
+        "ZRANGE",
+        "ZSCORE",
+    ]
+)
+
+# Read commands that take a list of keys as parameters
+MULTI_KEY_READ_COMMANDS = frozenset(["EXISTS", "MGET", "SDIFF", "SINTER", "SUNION"])
+
+# Write commands that take a single key as their first parameter.
+SINGLE_KEY_WRITE_COMMANDS = frozenset(
+    [
+        "EXPIRE",
+        "EXPIREAT",
+        "HINCRBY",
+        "HINCRBYFLOAT",
+        "HDEL",
+        "HMSET",
+        "HSET",
+        "HSETNX",
+        "LPUSH",
+        "LREM",
+        "LPOP",
+        "LSET",
+        "LTRIM",
+        "RPOP",
+        "RPUSH",
+        "SADD",
+        "SET",
+        "SETNX",
+        "SPOP",
+        "SREM",
+        "ZADD",
+        "ZINCRBY",
+        "ZPOPMAX",
+        "ZPOPMIN",
+        "ZREM",
+        "ZREMRANGEBYLEX",
+        "ZREMRANGEBYRANK",
+        "ZREMRANGEBYSCORE",
+    ]
+)
+
+# Write commands that take a list of keys as argument
+MULTI_KEY_WRITE_COMMANDS = frozenset(["DEL"])
+
+# These are a special case of multi-key write commands that take arguments in the form
+#  of key value [key value ...]
+MULTI_KEY_BATCH_WRITE_COMMANDS = frozenset(["MSET", "MSETNX"])
+
+
+class HotKeyTracker:
+    """
+    HotKeyTracker can be used to help identify hot keys within Redis.
+
+    Helper class that can be used to track our key usage and identify hot keys within
+    Redis. Whenever we send a read command to Redis we have a (very low but configurable)
+    chance to increase a counter associated with that key in Redis. Over time this should
+    allow us to find keys that are disproportionaly represented by querying the sorted
+    set "baseplate-hot-key-tracker-reads" in Redis. A same sorted set by the name of
+    "baseplate-hot-key-tracker-writes" will be used to track write frequency.
+
+    Both read and writes tracking have different configurable percentages, which means
+    we can enable tracking for reads without enabling it for writes or have different
+    percentages for them, which is useful when the number of reads is much higher than
+    the number of writes to a cluster.
+
+    This feature can be turned off by setting the tracking percentage to zero, and should
+    probably only be enabled if we're actively debugging an issue or looking for a regression.
+
+    The "baseplate-hot-key-tracker-reads" will have a TTL of 24 hours to ensure that
+    older key counts don't interfere with new debugging sessions. This means that the
+    sorted set and its contents will disappear in 24 hours after this feature is disabled
+    and we stopped writing to it.
+    """
+
+    def __init__(
+        self,
+        redis_client: redis.cluster.RedisCluster,  # Changed typehint
+        track_reads_sample_rate: float,
+        track_writes_sample_rate: float,
+    ):
+        self.redis_client = redis_client
+        self.track_reads_sample_rate = track_reads_sample_rate
+        self.track_writes_sample_rate = track_writes_sample_rate
+
+        self.reads_sorted_set_name = "baseplate-hot-key-tracker-reads"
+        self.writes_sorted_set_name = "baseplate-hot-key-tracker-writes"
+
+    def should_track_key_reads(self) -> bool:
+        return randomizer.random() < self.track_reads_sample_rate
+
+    def should_track_key_writes(self) -> bool:
+        return randomizer.random() < self.track_writes_sample_rate
+
+    def increment_keys_read_counter(self, key_list: list[str], ignore_errors: bool = True) -> None:
+        self._increment_hot_key_counter(key_list, self.reads_sorted_set_name, ignore_errors)
+
+    def increment_keys_written_counter(
+        self, key_list: list[str], ignore_errors: bool = True
+    ) -> None:
+        self._increment_hot_key_counter(key_list, self.writes_sorted_set_name, ignore_errors)
+
+    def _increment_hot_key_counter(
+        self, key_list: list[str], set_name: str, ignore_errors: bool = True
+    ) -> None:
+        if len(key_list) == 0:
+            return
+
+        try:
+            with self.redis_client.pipeline(transaction=False) as pipe:  # Removed positional arg
+                for key in key_list:
+                    pipe.zincrby(set_name, 1, key)
+                # Reset the TTL for the sorted set
+                pipe.expire(set_name, timedelta(hours=24))
+                pipe.execute()
+        except Exception as e:
+            # We don't want to disrupt this request even if key tracking fails, so just
+            # log it.
+            logger.exception(e)
+            if not ignore_errors:
+                raise
+
+    def maybe_track_key_usage(self, args: list[str]) -> None:
+        """Probabilistically track usage of the keys in this command.
+
+        If we have enabled key usage tracing *and* this command is withing the
+        percentage of commands we want to track, then write it to a sorted set
+        so we can keep track of the most accessed keys.
+        """
+        if len(args) == 0:
+            return
+
+        command = args[0]
+
+        if self.should_track_key_reads():
+            if command in SINGLE_KEY_READ_COMMANDS:
+                self.increment_keys_read_counter([args[1]])
+            elif command in MULTI_KEY_READ_COMMANDS:
+                self.increment_keys_read_counter(args[1:])
+
+        if self.should_track_key_writes():
+            if command in SINGLE_KEY_WRITE_COMMANDS:
+                self.increment_keys_written_counter([args[1]])
+            elif command in MULTI_KEY_WRITE_COMMANDS:
+                self.increment_keys_written_counter(args[1:])
+            elif command in MULTI_KEY_BATCH_WRITE_COMMANDS:
+                # These commands follow key value [key value...] format
+                self.increment_keys_written_counter(args[1::2])
+
+
+# We want to be able to combine blocking behaviour with the ability to read from replicas
+# Unfortunately this is not provide as-is so we combine two connection pool classes to provide
+# the desired behaviour.
+class ClusterWithReadReplicasBlockingConnectionPool(redis.cluster.ClusterBlockingConnectionPool):  # Changed import
+    # pylint: disable=arguments-differ
+    def get_node_by_slot(self, slot: int, read_command: bool = False) -> dict[str, Any]:
+        """Get a node from the slot.
+
+        If the command is a read command we'll try to return a random node.
+        If there are no replicas or this isn't a read command we'll return the primary.
+        """
+        try:
+            if read_command:
+                return random.choice(self.nodes.slots[slot])
+        except KeyError:
+            raise redis.cluster.exceptions.SlotNotCoveredError(  # Changed import
+                f"Slot {slot} not covered by the cluster"
+            )
+
+        # This isn't a read command, so return the primary (first node)
+        return self.nodes.slots[slot][0]
+
+
+def cluster_pool_from_config(
+    app_config: config.RawConfig, prefix: str = "rediscluster.", **kwargs: Any
+) -> redis.cluster.ClusterConnectionPool:  # Changed import
     """Make a ClusterConnectionPool from a configuration dictionary.
 
     The keys useful to :py:func:`cluster_pool_from_config` should be prefixed, e.g.
@@ -316,7 +561,7 @@ def cluster_pool_from_config(
             options.url, **kwargs
         )
     else:
-        connection_pool = rediscluster.ClusterBlockingConnectionPool.from_url(options.url, **kwargs)
+        connection_pool = redis.cluster.ClusterBlockingConnectionPool.from_url(options.url, **kwargs)  # Changed import
 
     connection_pool.track_key_reads_sample_rate = options.track_key_reads_sample_rate
     connection_pool.track_key_writes_sample_rate = options.track_key_writes_sample_rate
@@ -373,7 +618,7 @@ class ClusterRedisContextFactory(ContextFactory):
 
     def __init__(
         self,
-        connection_pool: rediscluster.ClusterConnectionPool,
+        connection_pool: redis.cluster.ClusterConnectionPool,  # Changed typehint
         name: str = "redis",
         redis_client_name: str = "",
     ):
@@ -382,7 +627,7 @@ class ClusterRedisContextFactory(ContextFactory):
         self.redis_client_name = redis_client_name
 
     def report_runtime_metrics(self, batch: metrics.Client) -> None:
-        if not isinstance(self.connection_pool, rediscluster.ClusterBlockingConnectionPool):
+        if not isinstance(self.connection_pool, redis.cluster.ClusterBlockingConnectionPool):  # Changed typehint
             return
 
         size = self.connection_pool.max_connections
@@ -404,7 +649,7 @@ class ClusterRedisContextFactory(ContextFactory):
         )
 
 
-class MonitoredRedisClusterConnection(rediscluster.RedisCluster):
+class MonitoredRedisClusterConnection(redis.cluster.RedisCluster):  # Changed import
     """Cluster Redis connection that collects diagnostic information.
 
     This connection acts like :py:class:`rediscluster.Redis` except that all
@@ -418,7 +663,7 @@ class MonitoredRedisClusterConnection(rediscluster.RedisCluster):
         self,
         context_name: str,
         server_span: Span,
-        connection_pool: rediscluster.ClusterConnectionPool,
+        connection_pool: redis.cluster.ClusterConnectionPool,  # Changed typehint
         track_key_reads_sample_rate: float = 0,
         track_key_writes_sample_rate: float = 0,
         redis_client_name: str = "",
@@ -456,7 +701,7 @@ class MonitoredRedisClusterConnection(rediscluster.RedisCluster):
 
             try:
                 with ACTIVE_REQUESTS.labels(**labels).track_inprogress():
-                    res = super().execute_command(command, *args[1:], **kwargs)
+                    res = super().execute_command(*args, **kwargs)
                 if isinstance(res, RedisError):
                     success = "false"
             except:  # noqa: E722

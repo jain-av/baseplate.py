@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import baseplate.lib.metrics
+    import baseplate.context
 
 
 class ContextFactory:
@@ -30,11 +31,12 @@ class ContextFactory:
 
         """
 
-    def make_object_for_context(self, name: str, span: "baseplate.Span") -> Any:
+    def make_object_for_context(self, name: str, span: "baseplate.Span", context: "baseplate.context.RequestContext") -> Any:
         """Return an object that can be added to the context object.
 
         :param name: The name assigned to this object on the context.
         :param span: The current span this object is being made for.
+        :param context: The Baseplate request context.
 
         """
         raise NotImplementedError

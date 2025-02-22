@@ -9,6 +9,7 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from prometheus_client import Counter, Gauge, Histogram
 from requests import PreparedRequest, Request, Response, Session
 from requests.adapters import HTTPAdapter
+from sqlalchemy import create_engine
 
 from baseplate import Span
 from baseplate.clients import ContextFactory
@@ -260,15 +261,15 @@ class BaseplateSession:
                 # to keep track of cookies, it should do so itself.
                 #
                 # note: we're still getting connection pooling because we're re-using the adapter.
-                session = Session()
-                session.mount("http://", self.adapter)
-                session.mount("https://", self.adapter)
-                response = session.send(request, **kwargs)
+                with Session() as session:
+                    session.mount("http://", self.adapter)
+                    session.mount("https://", self.adapter)
+                    response = session.send(request, **kwargs)
 
-                http_status_code = response.status_code
-                span.set_tag("http.status_code", http_status_code)
+                    http_status_code = response.status_code
+                    span.set_tag("http.status_code", http_status_code)
 
-            return response
+                return response
         finally:
             if sys.exc_info()[0] is not None:
                 status_code = ""

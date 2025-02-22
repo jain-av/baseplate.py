@@ -16,6 +16,7 @@ from baseplate.clients import ContextFactory
 from baseplate.lib import config
 from baseplate.lib.prometheus_metrics import default_latency_buckets
 from baseplate.lib.secrets import SecretsStore
+from sqlalchemy import URL
 
 T = TypeVar("T")
 
@@ -75,7 +76,15 @@ def connection_from_config(
         credentials = secrets.get_credentials(options.credentials_secret)
         kwargs.setdefault("userid", credentials.username)
         kwargs.setdefault("password", credentials.password)
-    return Connection(hostname=options.hostname, virtual_host=options.virtual_host, **kwargs)
+    
+    url = URL.create(
+        "pyamqp",
+        username=kwargs.get("userid"),
+        password=kwargs.get("password"),
+        host=options.hostname,
+        virtualhost=options.virtual_host,
+    )
+    return Connection(url)
 
 
 def exchange_from_config(app_config: config.RawConfig, prefix: str, **kwargs: Any) -> Exchange:
@@ -285,19 +294,10 @@ class _KombuProducer:
             producer_pool = self.producers[self.connection]
             with producer_pool.acquire(block=True) as producer:
                 try:
-                    p = producer.publish(
+                    producer.publish(
                         body=body, routing_key=routing_key, exchange=self.exchange, **kwargs
                     )
-                    # since publish(...) returns a promise, we have to handle it with callbacks
-                    on_success = promise(self._on_success, (start_time,))
-                    on_error = promise(self._on_error, (start_time,))
-                    p.then(on_success, on_error=on_error)
-                    return p
+                    self._on_success(start_time)
                 except Exception:
-                    if isinstance(self.connection.transport, kombu.transport.pyamqp.Transport):
-                        # we have to handle exceptions here
-                        AMQP_PROCESSING_TIME.labels(
-                            **self.prom_labels, amqp_success="false"
-                        ).observe(time.perf_counter() - start_time)
-                        AMQP_PROCESSED_TOTAL.labels(**self.prom_labels, amqp_success="false").inc()
+                    self._on_error(start_time)
                     raise
