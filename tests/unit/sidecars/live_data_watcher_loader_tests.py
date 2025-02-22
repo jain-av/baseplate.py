@@ -8,6 +8,7 @@ import pytest
 from botocore.response import StreamingBody
 from botocore.stub import Stubber
 from moto import mock_aws
+from sqlalchemy import true
 
 from baseplate.sidecars.live_data_watcher import (
     LoaderException,

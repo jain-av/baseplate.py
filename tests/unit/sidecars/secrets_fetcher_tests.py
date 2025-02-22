@@ -91,7 +91,7 @@ class Tests(TestCase):
                 "group": config.Optional(config.UnixGroup, default=0),
                 "mode": config.Optional(config.Integer(base=8), default=0o400),  # type: ignore
             },
-            "secrets": config.Optional(config.TupleOf(config.String), default=[]),
+            "secrets": config.Optional(typing.Tuple[str, ...], default=()),
             "callback": config.Optional(config.String),
         }
 
@@ -176,7 +176,7 @@ class BadJSONTests(TestCase):
                 "group": config.Optional(config.UnixGroup, default=0),
                 "mode": config.Optional(config.Integer(base=8), default=0o400),  # type: ignore
             },
-            "secrets": config.Optional(config.TupleOf(config.String), default=[]),
+            "secrets": config.Optional(typing.Tuple[str, ...], default=()),
             "callback": config.Optional(config.String),
         }
 
