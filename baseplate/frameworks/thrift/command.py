@@ -1,8 +1,8 @@
 import glob
 import os
 import subprocess
+from setuptools import Command
 from distutils.command.build_py import build_py
-from distutils.core import Command
 
 import baseplate.thrift
 
