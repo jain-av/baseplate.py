@@ -31,6 +31,7 @@ from thrift.transport.TTransport import TTransportException
 
 from baseplate.lib import config
 from baseplate.lib.retry import RetryPolicy
+from sqlalchemy import QueuePool
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +232,7 @@ class ThriftConnectionPool:
 
             try:
                 yield prot
-            except socket.timeout:
+            except TimeoutError:
                 # thrift doesn't re-wrap socket timeout errors appropriately so
                 # we'll do it here for a saner exception hierarchy
                 raise TTransportException(

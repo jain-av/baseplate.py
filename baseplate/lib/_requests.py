@@ -11,16 +11,17 @@ from typing import Optional
 
 import requests.adapters
 import urllib3.connectionpool
+from urllib3.util import connection
 
 # the adapter code below is inspired by similar code in
 # https://github.com/msabramo/requests-unixsocket/blob/master/requests_unixsocket/adapters.py
 # https://github.com/docker/docker-py/blob/master/docker/unixconn/unixconn.py
 
 
-class _UNIXConnection(urllib3.connectionpool.HTTPConnection):
+class _UNIXConnection(connection.HTTPConnection):  # Changed inheritance
     # pylint: disable=super-init-not-called
     def __init__(self, url: str):
-        urllib3.connectionpool.HTTPConnection.__init__(self, "localhost")
+        super().__init__("localhost")  # Changed base class constructor call
         self.url = urllib.parse.urlparse(url)
 
     def connect(self) -> None:

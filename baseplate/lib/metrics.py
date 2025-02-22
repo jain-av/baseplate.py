@@ -302,14 +302,6 @@ class Timer:
         self.stopped: bool = False
         self.sample_rate = 1.0
 
-    def start(self, sample_rate: float = 1.0) -> None:
-        """Record the current time as the start of the timer."""
-        assert not self.start_time, "timer already started"
-        assert not self.stopped, "timer already stopped"
-
-        self.sample_rate = sample_rate
-        self.start_time = time.time()
-
     def stop(self) -> None:
         """Stop the timer and record the total elapsed time."""
         assert self.start_time, "timer not started"
@@ -317,10 +309,10 @@ class Timer:
 
         now = time.time()
         elapsed = now - self.start_time
-        self.send(elapsed, self.sample_rate)
+        self.send(elapsed)
         self.stopped = True
 
-    def send(self, elapsed: float, sample_rate: float = 1.0) -> None:
+    def send(self, elapsed: float) -> None:
         """Directly send a timer value without having to stop/start.
 
         This can be useful when the timing was managed elsewhere and we just
@@ -332,9 +324,6 @@ class Timer:
         if formatted_tags:
             serialized += formatted_tags
         serialized += f":{(elapsed * 1000.0):g}|ms".encode()
-        if sample_rate < 1.0:
-            sampling_info = f"@{sample_rate:g}".encode()
-            serialized = b"|".join([serialized, sampling_info])
         self.transport.send(serialized)
 
     def update_tags(self, tags: dict) -> None:
@@ -362,28 +351,26 @@ class Counter:
         self.name = name
         self.tags = tags
 
-    def increment(self, delta: float = 1.0, sample_rate: float = 1.0) -> None:
+    def increment(self, delta: float = 1.0) -> None:
         """Increment the counter.
 
         :param delta: The amount to increase the counter by.
-        :param sample_rate: What rate this counter is sampled at. [0-1].
 
         """
-        self.send(delta, sample_rate)
+        self.send(delta)
 
-    def decrement(self, delta: float = 1.0, sample_rate: float = 1.0) -> None:
+    def decrement(self, delta: float = 1.0) -> None:
         """Decrement the counter.
 
         This is equivalent to :py:meth:`increment` with delta negated.
 
         """
-        self.increment(delta=-delta, sample_rate=sample_rate)
+        self.increment(delta=-delta)
 
-    def send(self, delta: float, sample_rate: float) -> None:
+    def send(self, delta: float) -> None:
         """Send the counter to the backend.
 
         :param delta: The amount to increase the counter by.
-        :param sample_rate: What rate this counter is sampled at. [0-1].
 
         """
         serialized = self.name
@@ -391,9 +378,6 @@ class Counter:
         if formatted_tags:
             serialized += formatted_tags
         serialized += f":{delta:g}".encode() + b"|c"
-        if sample_rate < 1.0:
-            sampling_info = f"@{sample_rate:g}".encode()
-            serialized = b"|".join([serialized, sampling_info])
         self.transport.send(serialized)
 
 
@@ -422,22 +406,21 @@ class BatchCounter(Counter):
         self.packets: collections.defaultdict[float, float] = collections.defaultdict(float)
         self.tags = tags
 
-    def increment(self, delta: float = 1.0, sample_rate: float = 1.0) -> None:
+    def increment(self, delta: float = 1.0) -> None:
         """Increment the counter.
 
         :param delta: The amount to increase the counter by.
-        :param sample_rate: What rate this counter is sampled at. [0-1].
 
         """
-        self.packets[sample_rate] += delta
+        self.packets[1.0] += delta
 
-    def decrement(self, delta: float = 1.0, sample_rate: float = 1.0) -> None:
+    def decrement(self, delta: float = 1.0) -> None:
         """Decrement the counter.
 
         This is equivalent to :py:meth:`increment` with delta negated.
 
         """
-        self.increment(delta=-delta, sample_rate=sample_rate)
+        self.increment(delta=-delta)
 
     @property
     def total(self) -> int:
@@ -445,7 +428,7 @@ class BatchCounter(Counter):
 
     def flush(self) -> None:
         for sample_rate, delta in self.packets.items():
-            super().send(delta, sample_rate)
+            super().send(delta)
 
 
 class Histogram:

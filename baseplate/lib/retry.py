@@ -87,6 +87,7 @@ class MaximumAttemptsRetryPolicy(RetryPolicy):
 
     def __init__(self, policy: RetryPolicy, attempts: int):
         self.subpolicy = policy
+
         self.attempts = attempts
 
     def yield_attempts(self) -> Iterator[Optional[float]]:

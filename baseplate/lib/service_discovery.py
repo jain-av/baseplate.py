@@ -26,6 +26,8 @@ from baseplate.lib.config import Endpoint, EndpointConfiguration
 from baseplate.lib.file_watcher import FileWatcher, WatchedFileNotAvailableError
 from baseplate.lib.random import WeightedLottery
 
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import Session
 
 class Backend(NamedTuple):
     """A description of a service backend.

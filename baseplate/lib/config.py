@@ -392,7 +392,6 @@ def TupleOf(item_parser: Callable[[str], T]) -> Callable[[str], Sequence[T]]:  #
 
     return tuple_of
 
-
 def DefaultFromEnv(
     item_parser: Callable[[str], T], default_src: str, fallback: OptionalType[T] = None
 ) -> Callable[[str], OptionalType[T]]:  # noqa: D401
@@ -404,10 +403,10 @@ def DefaultFromEnv(
     provided configuration
     """
     env = os.getenv(default_src) or ""
-    default = Optional(item_parser, fallback)(env)
+    default = OptionalType(item_parser, fallback)(env)
 
     def default_from_env(text: str) -> OptionalType[T]:
-        val = Optional(item_parser, default)(text)
+        val = OptionalType(item_parser, default)(text)
         if val:
             return val
 
@@ -416,7 +415,7 @@ def DefaultFromEnv(
     return default_from_env
 
 
-def Optional(
+def OptionalType(
     item_parser: Callable[[str], T], default: OptionalType[T] = None
 ) -> Callable[[str], OptionalType[T]]:  # noqa: D401
     """An option of type T, or ``default`` if not configured."""
@@ -445,189 +444,3 @@ def Fallback(
             return fallback_parser(text)
 
     return fallback
-
-
-class ConfigNamespace(dict):
-    def __init__(self) -> None:
-        super().__init__()
-        self.__dict__ = self
-
-    def __getattr__(self, name: str) -> Any: ...
-
-
-ConfigSpecItem = Union["Parser", dict[str, Any], Callable[[str], T]]
-ConfigSpec = dict[str, ConfigSpecItem]
-RawConfig = dict[str, str]
-
-
-class Parser(Generic[T]):
-    """Base class for configuration parsers."""
-
-    @staticmethod
-    def from_spec(spec: ConfigSpecItem) -> "Parser":
-        """Return a parser for the given spec object."""
-        if isinstance(spec, Parser):
-            return spec
-        if isinstance(spec, dict):
-            return SpecParser(spec)
-        if callable(spec):
-            return CallableParser(spec)
-        raise AssertionError(f"invalid specification: {spec!r}")
-
-    def parse(self, key_path: str, raw_config: RawConfig) -> T:
-        """Parse and return the relevant info for a given key.
-
-        :param key_path: The key this parser is looking for.
-        :param raw_config: The full raw configuration dictionary.
-
-        """
-        raise NotImplementedError
-
-
-class SpecParser(Parser[ConfigNamespace]):
-    """A parser that validates a static specification."""
-
-    def __init__(self, spec: ConfigSpec):
-        self.spec = spec
-
-    def parse(self, key_path: str, raw_config: RawConfig) -> ConfigNamespace:
-        parsed = ConfigNamespace()
-        for key, spec in self.spec.items():
-            assert "." not in key, "dots are not allowed in keys"
-
-            if key_path:
-                sub_key_path = f"{key_path}.{key}"
-            else:
-                sub_key_path = key
-
-            parser = Parser.from_spec(spec)
-            parsed[key] = parser.parse(sub_key_path, raw_config)
-        return parsed
-
-
-class CallableParser(Parser[T]):
-    """A parser that wraps a simple callable."""
-
-    def __init__(self, callable_: Callable[[str], T]):
-        self.callable = callable_
-
-    def parse(self, key_path: str, raw_config: RawConfig) -> T:
-        raw_value = raw_config.get(key_path, "")
-
-        try:
-            return self.callable(raw_value)
-        except Exception as exc:
-            raise ConfigurationError(key_path, exc)
-
-
-class DictOf(Parser[ConfigNamespace]):
-    """A group of options of a given type.
-
-    This is useful for providing data to the application without the
-    application having to know ahead of time all of the possible keys.
-
-    .. highlight:: ini
-
-    .. include:: ../../../config_dictof_example.ini
-       :literal:
-
-    .. highlight:: py
-
-    .. testsetup:: dictof_simple
-
-        import configparser
-        from baseplate import config
-        config_parser = configparser.RawConfigParser()
-        config_parser.read_file(open("docs/config_dictof_example.ini"))
-        raw_config = dict(config_parser.items("app:main"))
-
-    .. doctest:: dictof_simple
-
-        >>> cfg = config.parse_config(raw_config, {
-        ...     "population": config.DictOf(config.Integer),
-        ... })
-
-        >>> len(cfg.population)
-        5
-
-        >>> cfg.population["br"]
-        207645000
-
-    It can also be combined with other configuration specs or parsers to parse
-    more complicated structures:
-
-    .. highlight:: ini
-
-    .. include:: ../../../config_dictof_spec_example.ini
-       :literal:
-
-    .. highlight:: py
-
-    .. testsetup:: dictof_spec
-
-        import configparser
-        from baseplate import config
-        config_parser = configparser.RawConfigParser()
-        config_parser.read_file(open("docs/config_dictof_spec_example.ini"))
-        raw_config = dict(config_parser.items("app:main"))
-
-    .. doctest:: dictof_spec
-
-        >>> cfg = config.parse_config(raw_config, {
-        ...     "countries": config.DictOf({
-        ...         "population": config.Integer,
-        ...         "capital": config.String,
-        ...     }),
-        ... })
-
-        >>> len(cfg.countries)
-        5
-
-        >>> cfg.countries["cn"].capital
-        'Beijing'
-
-        >>> cfg.countries["id"].population
-        263447000
-
-    """
-
-    def __init__(self, spec: ConfigSpecItem):
-        self.subparser = Parser.from_spec(spec)
-
-    def parse(self, key_path: str, raw_config: RawConfig) -> ConfigNamespace:
-        # match keys that start out with the prefix we expect (key_path) and
-        # extract the subkey from the.key.prefix.{subkey}.the.rest
-        if key_path:
-            root = key_path + "."
-        else:
-            root = ""
-        matcher = re.compile("^" + root.replace(".", r"\.") + r"([^.]+)")
-
-        values = ConfigNamespace()
-        seen_subkeys: set[str] = set()
-        for key in raw_config:
-            m = matcher.search(key)
-            if not m:
-                continue
-
-            subkey = m.group(1)
-            if subkey in seen_subkeys:
-                continue
-
-            full_path = root + subkey
-            values[subkey] = self.subparser.parse(full_path, raw_config)
-            seen_subkeys.add(subkey)
-        return values
-
-
-def parse_config(config: RawConfig, spec: ConfigSpec) -> ConfigNamespace:
-    """Parse options against a spec and return a structured representation.
-
-    :param config: The raw stringy configuration dictionary.
-    :param spec: A specification of what the configuration should look like.
-    :raises: :py:exc:`ConfigurationError` The configuration violated the spec.
-    :return: A structured configuration object.
-
-    """
-    parser = Parser.from_spec(spec)
-    return parser.parse("", config)

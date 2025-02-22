@@ -13,6 +13,8 @@ from baseplate import Span
 from baseplate.clients import ContextFactory
 from baseplate.lib import cached_property, config, warn_deprecated
 from baseplate.lib.file_watcher import FileWatcher, WatchedFileNotAvailableError
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
 ISO_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
