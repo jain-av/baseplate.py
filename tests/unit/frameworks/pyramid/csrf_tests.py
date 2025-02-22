@@ -42,7 +42,7 @@ class TokenCSRFStoragePolicyTests(unittest.TestCase):
         self.assertTrue(token.startswith("1."))
         self.assertEqual(token, "1.AQAA-BEAAF-br-ovnk0q8Wd0kA98-jsak9elbMqo0WbjT0GuyRTD")
         signature = token.split(".")[-1]
-        validate_signature(self.policy._get_secret(), "1.t2_1", signature)
+        validate_signature(self.policy._get_secret().encode("utf8"), "1.t2_1".encode("utf8"), signature.encode("utf8"))
 
     def test_get_csrf_token(self, _):
         request = mock.Mock()

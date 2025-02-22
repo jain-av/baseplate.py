@@ -60,39 +60,72 @@ class TestPyramidHttpServerIntegrationPrometheus:
 
         mock_manager = mock.Mock()
         with mock.patch.object(
-            ACTIVE_REQUESTS.labels(**prom_labels),
-            "inc",
-            wraps=ACTIVE_REQUESTS.labels(**prom_labels).inc,
-        ) as active_inc_spy_method:
-            mock_manager.attach_mock(active_inc_spy_method, "inc")
+            ACTIVE_REQUESTS,
+            "labels",
+            wraps=ACTIVE_REQUESTS.labels,
+        ) as active_labels_spy:
+            active_labels_obj = active_labels_spy(**prom_labels)
+            mock_manager.attach_mock(active_labels_spy, "labels")
             with mock.patch.object(
-                ACTIVE_REQUESTS.labels(**prom_labels),
-                "dec",
-                wraps=ACTIVE_REQUESTS.labels(**prom_labels).dec,
-            ) as active_dec_spy_method:
-                mock_manager.attach_mock(active_dec_spy_method, "dec")
+                active_labels_obj,
+                "inc",
+                wraps=active_labels_obj.inc,
+            ) as active_inc_spy_method:
+                mock_manager.attach_mock(active_inc_spy_method, "inc")
                 with mock.patch.object(
-                    REQUEST_SIZE.labels(**prom_labels, http_success=http_success),
-                    "observe",
-                    wraps=REQUEST_SIZE.labels(**prom_labels, http_success=http_success).observe,
-                ) as request_size_spy_method:
-                    mock_manager.attach_mock(request_size_spy_method, "request_observe")
+                    active_labels_obj,
+                    "dec",
+                    wraps=active_labels_obj.dec,
+                ) as active_dec_spy_method:
+                    mock_manager.attach_mock(active_dec_spy_method, "dec")
                     with mock.patch.object(
-                        RESPONSE_SIZE.labels(**prom_labels, http_success=http_success),
-                        "observe",
-                        wraps=RESPONSE_SIZE.labels(
+                        REQUEST_SIZE,
+                        "labels",
+                        wraps=REQUEST_SIZE.labels,
+                    ) as request_size_labels_spy:
+                        request_size_labels_obj = request_size_labels_spy(
                             **prom_labels, http_success=http_success
-                        ).observe,
-                    ) as response_size_spy_method:
-                        mock_manager.attach_mock(response_size_spy_method, "response_observe")
-                        with expectation:
-                            bpConfigurator._on_new_request(event)
-                            _make_baseplate_tween(handler=handler, _registry=registry)(request)
+                        )
+                        mock_manager.attach_mock(request_size_labels_spy, "labels_request")
+                        with mock.patch.object(
+                            request_size_labels_obj,
+                            "observe",
+                            wraps=request_size_labels_obj.observe,
+                        ) as request_size_spy_method:
+                            mock_manager.attach_mock(request_size_spy_method, "request_observe")
+                            with mock.patch.object(
+                                RESPONSE_SIZE,
+                                "labels",
+                                wraps=RESPONSE_SIZE.labels,
+                            ) as response_size_labels_spy:
+                                response_size_labels_obj = response_size_labels_spy(
+                                    **prom_labels, http_success=http_success
+                                )
+                                mock_manager.attach_mock(
+                                    response_size_labels_spy, "labels_response"
+                                )
+                                with mock.patch.object(
+                                    response_size_labels_obj,
+                                    "observe",
+                                    wraps=response_size_labels_obj.observe,
+                                ) as response_size_spy_method:
+                                    mock_manager.attach_mock(
+                                        response_size_spy_method, "response_observe"
+                                    )
+                                    with expectation:
+                                        bpConfigurator._on_new_request(event)
+                                        _make_baseplate_tween(handler=handler, _registry=registry)(
+                                            request
+                                        )
 
         assert (
             REGISTRY.get_sample_value(
                 "http_server_requests_total",
-                {**prom_labels, "http_response_code": status_code, "http_success": http_success},
+                {
+                    **prom_labels,
+                    "http_response_code": status_code,
+                    "http_success": http_success,
+                },
             )
             == 1
         )
@@ -105,12 +138,20 @@ class TestPyramidHttpServerIntegrationPrometheus:
         )
         assert REGISTRY.get_sample_value("http_server_active_requests", prom_labels) == 0
         expected_calls = [
+            mock.call.labels(**prom_labels),
             mock.call.inc(),  # ensures we first increase number of active requests
+            mock.call.labels(**prom_labels),
             mock.call.dec(),
+            mock.call.labels_request(**prom_labels, http_success=http_success),
             mock.call.request_observe(42),
         ]
         if not isinstance(response, Exception):
-            expected_calls.append(mock.call.response_observe(response.content_length))
+            expected_calls.extend(
+                [
+                    mock.call.labels_response(**prom_labels, http_success=http_success),
+                    mock.call.response_observe(response.content_length),
+                ]
+            )
         assert mock_manager.mock_calls == expected_calls
 
         assert (
@@ -163,39 +204,72 @@ class TestPyramidHttpServerIntegrationPrometheus:
 
         mock_manager = mock.Mock()
         with mock.patch.object(
-            ACTIVE_REQUESTS.labels(**prom_labels),
-            "inc",
-            wraps=ACTIVE_REQUESTS.labels(**prom_labels).inc,
-        ) as active_inc_spy_method:
-            mock_manager.attach_mock(active_inc_spy_method, "inc")
+            ACTIVE_REQUESTS,
+            "labels",
+            wraps=ACTIVE_REQUESTS.labels,
+        ) as active_labels_spy:
+            active_labels_obj = active_labels_spy(**prom_labels)
+            mock_manager.attach_mock(active_labels_spy, "labels")
             with mock.patch.object(
-                ACTIVE_REQUESTS.labels(**prom_labels),
-                "dec",
-                wraps=ACTIVE_REQUESTS.labels(**prom_labels).dec,
-            ) as active_dec_spy_method:
-                mock_manager.attach_mock(active_dec_spy_method, "dec")
+                active_labels_obj,
+                "inc",
+                wraps=active_labels_obj.inc,
+            ) as active_inc_spy_method:
+                mock_manager.attach_mock(active_inc_spy_method, "inc")
                 with mock.patch.object(
-                    REQUEST_SIZE.labels(**prom_labels, http_success=http_success),
-                    "observe",
-                    wraps=REQUEST_SIZE.labels(**prom_labels, http_success=http_success).observe,
-                ) as request_size_spy_method:
-                    mock_manager.attach_mock(request_size_spy_method, "request_observe")
+                    active_labels_obj,
+                    "dec",
+                    wraps=active_labels_obj.dec,
+                ) as active_dec_spy_method:
+                    mock_manager.attach_mock(active_dec_spy_method, "dec")
                     with mock.patch.object(
-                        RESPONSE_SIZE.labels(**prom_labels, http_success=http_success),
-                        "observe",
-                        wraps=RESPONSE_SIZE.labels(
+                        REQUEST_SIZE,
+                        "labels",
+                        wraps=REQUEST_SIZE.labels,
+                    ) as request_size_labels_spy:
+                        request_size_labels_obj = request_size_labels_spy(
                             **prom_labels, http_success=http_success
-                        ).observe,
-                    ) as response_size_spy_method:
-                        mock_manager.attach_mock(response_size_spy_method, "response_observe")
-                        with expectation:
-                            bpConfigurator._on_new_request(event)
-                            _make_baseplate_tween(handler=handler, _registry=registry)(request)
+                        )
+                        mock_manager.attach_mock(request_size_labels_spy, "labels_request")
+                        with mock.patch.object(
+                            request_size_labels_obj,
+                            "observe",
+                            wraps=request_size_labels_obj.observe,
+                        ) as request_size_spy_method:
+                            mock_manager.attach_mock(request_size_spy_method, "request_observe")
+                            with mock.patch.object(
+                                RESPONSE_SIZE,
+                                "labels",
+                                wraps=RESPONSE_SIZE.labels,
+                            ) as response_size_labels_spy:
+                                response_size_labels_obj = response_size_labels_spy(
+                                    **prom_labels, http_success=http_success
+                                )
+                                mock_manager.attach_mock(
+                                    response_size_labels_spy, "labels_response"
+                                )
+                                with mock.patch.object(
+                                    response_size_labels_obj,
+                                    "observe",
+                                    wraps=response_size_labels_obj.observe,
+                                ) as response_size_spy_method:
+                                    mock_manager.attach_mock(
+                                        response_size_spy_method, "response_observe"
+                                    )
+                                    with expectation:
+                                        bpConfigurator._on_new_request(event)
+                                        _make_baseplate_tween(handler=handler, _registry=registry)(
+                                            request
+                                        )
 
         assert (
             REGISTRY.get_sample_value(
                 "http_server_requests_total",
-                {**prom_labels, "http_response_code": status_code, "http_success": http_success},
+                {
+                    **prom_labels,
+                    "http_response_code": status_code,
+                    "http_success": http_success,
+                },
             )
             == 1
         )
@@ -208,12 +282,20 @@ class TestPyramidHttpServerIntegrationPrometheus:
         )
         assert REGISTRY.get_sample_value("http_server_active_requests", prom_labels) == 0
         expected_calls = [
+            mock.call.labels(**prom_labels),
             mock.call.inc(),  # ensures we first increase number of active requests
+            mock.call.labels(**prom_labels),
             mock.call.dec(),
+            mock.call.labels_request(**prom_labels, http_success=http_success),
             mock.call.request_observe(42),
         ]
         if not isinstance(response, Exception):
-            expected_calls.append(mock.call.response_observe(response.content_length))
+            expected_calls.extend(
+                [
+                    mock.call.labels_response(**prom_labels, http_success=http_success),
+                    mock.call.response_observe(response.content_length),
+                ]
+            )
         assert mock_manager.mock_calls == expected_calls
 
         assert (
