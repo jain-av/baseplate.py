@@ -10,6 +10,8 @@ import confluent_kafka
 from gevent.server import StreamServer
 from prometheus_client import Counter, Gauge, Histogram
 from typing_extensions import Self
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import Session, declarative_base
 
 from baseplate import Baseplate, RequestContext
 from baseplate.lib.prometheus_metrics import default_latency_buckets
@@ -291,7 +293,12 @@ class _BaseKafkaQueueConsumerFactory(QueueConsumerFactory):
         assert service_name and group_name, "group_id must start with 'SERVICENAME.'"
         assert name == f"kafka_consumer.{group_name}"
 
-        consumer = cls.make_kafka_consumer(bootstrap_servers, group_id, topics, kafka_config)
+        consumer = cls.make_kafka_consumer(
+            bootstrap_servers=bootstrap_servers,
+            group_id=group_id,
+            topics=topics,
+            kafka_config=kafka_config,
+        )
 
         return cls(
             name=name,
@@ -375,10 +382,10 @@ class _BaseKafkaQueueConsumerFactory(QueueConsumerFactory):
 
     def build_message_handler(self) -> KafkaMessageHandler:
         return KafkaMessageHandler(
-            self.baseplate,
-            self.name,
-            self.handler_fn,
-            self.message_unpack_fn,
+            baseplate=self.baseplate,
+            name=self.name,
+            handler_fn=self.handler_fn,
+            message_unpack_fn=self.message_unpack_fn,
             prometheus_client_name=self.prometheus_client_name,
         )
 
@@ -460,8 +467,8 @@ class InOrderConsumerFactory(_BaseKafkaQueueConsumerFactory):
             # prior to processing has finished.
             "max.poll.interval.ms": 300000,
             # Enable offset autocommit, but disable offset store.
-            "enable.auto.commit": "true",
-            "enable.auto.offset.store": "false",
+            "enable.auto.commit": True,
+            "enable.auto.offset.store": False,
         }
 
     def build_message_handler(self) -> KafkaMessageHandler:
@@ -586,9 +593,9 @@ class FastConsumerFactory(_BaseKafkaQueueConsumerFactory):
             # prior to processing has finished.
             "max.poll.interval.ms": 300000,
             # autocommit offsets every 5 seconds
-            "enable.auto.commit": "true",
+            "enable.auto.commit": True,
             "auto.commit.interval.ms": 5000,
-            "enable.auto.offset.store": "true",
+            "enable.auto.offset.store": True,
             # register a commit callback so that we'll log commits
             "on_commit": cls._commit_callback,
         }

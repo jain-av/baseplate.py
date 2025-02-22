@@ -219,7 +219,11 @@ class KombuMessageHandler(MessageHandler):
                 "The message reached the retry limit."
             )
             AMQP_REJECTED_TOTAL.labels(
-                **prometheus_labels._asdict(), reason_code=AMQP_REJECTED_REASON_RETRIES
+                amqp_address=prometheus_labels.amqp_address,
+                amqp_virtual_host=prometheus_labels.amqp_virtual_host,
+                amqp_exchange_name=prometheus_labels.amqp_exchange_name,
+                amqp_routing_key=prometheus_labels.amqp_routing_key,
+                reason_code=AMQP_REJECTED_REASON_RETRIES,
             ).inc()
             message.reject()
             return
@@ -235,7 +239,12 @@ class KombuMessageHandler(MessageHandler):
         )
 
         message.channel.basic_publish(new_message, message_exchange, message_routing_key)
-        AMQP_REPUBLISHED_TOTAL.labels(**prometheus_labels._asdict()).inc()
+        AMQP_REPUBLISHED_TOTAL.labels(
+            amqp_address=prometheus_labels.amqp_address,
+            amqp_virtual_host=prometheus_labels.amqp_virtual_host,
+            amqp_exchange_name=prometheus_labels.amqp_exchange_name,
+            amqp_routing_key=prometheus_labels.amqp_routing_key,
+        ).inc()
         logger.exception(
             "Unhandled error while trying to process a message. "
             "The retry message has been published to the queue broker."
@@ -259,7 +268,11 @@ class KombuMessageHandler(MessageHandler):
         if self._is_ttl_over(message):
             message.reject()
             AMQP_REJECTED_TOTAL.labels(
-                **prometheus_labels._asdict(), reason_code=AMQP_REJECTED_REASON_TTL
+                amqp_address=prometheus_labels.amqp_address,
+                amqp_virtual_host=prometheus_labels.amqp_virtual_host,
+                amqp_exchange_name=prometheus_labels.amqp_exchange_name,
+                amqp_routing_key=prometheus_labels.amqp_routing_key,
+                reason_code=AMQP_REJECTED_REASON_TTL,
             ).inc()
             return
 
