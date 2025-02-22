@@ -266,22 +266,105 @@ class Error(TException):
         details=None,
         retryable=None,
     ):
-        super(Error, self).__setattr__("code", code)
-        super(Error, self).__setattr__("message", message)
-        super(Error, self).__setattr__("details", details)
-        super(Error, self).__setattr__("retryable", retryable)
+        self.code = code
+        self.message = message
+        self.details = details
+        self.retryable = retryable
 
-    def __setattr__(self, *args):
-        if args[0] not in self.__slots__:
-            super().__setattr__(*args)
+    def read(self, iprot):
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
-        raise TypeError("can't modify immutable instance")
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.code = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRING:
+                    self.message = iprot.readString().decode("utf-8") if sys.version_info[0] == 2 else iprot.readString().decode("utf-8")
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.MAP:
+                    self.details = {}
+                    (_ktype1, _vtype2, _size0) = iprot.readMapBegin()
+                    for _i4 in range(_size0):
+                        _key3 = iprot.readString().decode("utf-8") if sys.version_info[0] == 2 else iprot.readString().decode("utf-8")
+                        _val4 = iprot.readString().decode("utf-8") if sys.version_info[0] == 2 else iprot.readString().decode("utf-8")
+                        self.details[_key3] = _val4
+                    iprot.readMapEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.BOOL:
+                    self.retryable = iprot.readBool()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
 
-    def __delattr__(self, *args):
-        if args[0] not in self.__slots__:
-            super().__delattr__(*args)
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        raise TypeError("can't modify immutable instance")
+        oprot.writeStructBegin("Error")
+        if self.code is not None:
+            oprot.writeFieldBegin("code", TType.I32, 1)
+            oprot.writeI32(self.code)
+            oprot.writeFieldEnd()
+        if self.message is not None:
+            oprot.writeFieldBegin("message", TType.STRING, 2)
+            oprot.writeString(self.message.encode("utf-8") if sys.version_info[0] == 2 else self.message.encode("utf-8"))
+            oprot.writeFieldEnd()
+        if self.details is not None:
+            oprot.writeFieldBegin("details", TType.MAP, 3)
+            oprot.writeMapBegin(TType.STRING, TType.STRING, len(self.details))
+            for k, v in self.details.items():
+                oprot.writeString(k.encode("utf-8") if sys.version_info[0] == 2 else k.encode("utf-8"))
+                oprot.writeString(v.encode("utf-8") if sys.version_info[0] == 2 else v.encode("utf-8"))
+            oprot.writeMapEnd()
+            oprot.writeFieldEnd()
+        if self.retryable is not None:
+            oprot.writeFieldBegin("retryable", TType.BOOL, 4)
+            oprot.writeBool(self.retryable)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
+        L = ["%s=%r" % (key, getattr(self, key)) for key in self.__slots__]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        for attr in self.__slots__:
+            my_val = getattr(self, attr)
+            other_val = getattr(other, attr)
+            if my_val != other_val:
+                return False
+        return True
+
+    def __ne__(self, other):
+        return not (self == other)
 
     def __hash__(self):
         return hash(self.__class__) ^ hash(
@@ -292,6 +375,23 @@ class Error(TException):
                 self.retryable,
             )
         )
+
+
+all_structs.append(IsHealthyRequest)
+IsHealthyRequest.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, "probe", None, None,),  # 1
+)
+all_structs.append(Error)
+Error.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, "code", None, None,),  # 1
+    (2, TType.STRING, "message", "UTF8", None,),  # 2
+    (3, TType.MAP, "details", (TType.STRING, "UTF8", TType.STRING, "UTF8", False), None,),  # 3
+    (4, TType.BOOL, "retryable", None, None,),  # 4
+)
+fix_spec(all_structs)
+del all_structs
 
     @classmethod
     def read(cls, iprot):
@@ -317,11 +417,7 @@ class Error(TException):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    message = (
-                        iprot.readString().decode("utf-8", errors="replace")
-                        if sys.version_info[0] == 2
-                        else iprot.readString()
-                    )
+                    message = iprot.readString().decode('utf-8')
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
@@ -329,16 +425,8 @@ class Error(TException):
                     details = {}
                     (_ktype1, _vtype2, _size0) = iprot.readMapBegin()
                     for _i4 in range(_size0):
-                        _key5 = (
-                            iprot.readString().decode("utf-8", errors="replace")
-                            if sys.version_info[0] == 2
-                            else iprot.readString()
-                        )
-                        _val6 = (
-                            iprot.readString().decode("utf-8", errors="replace")
-                            if sys.version_info[0] == 2
-                            else iprot.readString()
-                        )
+                        _key5 = iprot.readString().decode('utf-8')
+                        _val6 = iprot.readString().decode('utf-8')
                         details[_key5] = _val6
                     iprot.readMapEnd()
                 else:
@@ -370,16 +458,14 @@ class Error(TException):
             oprot.writeFieldEnd()
         if self.message is not None:
             oprot.writeFieldBegin("message", TType.STRING, 2)
-            oprot.writeString(
-                self.message.encode("utf-8") if sys.version_info[0] == 2 else self.message
-            )
+            oprot.writeString(self.message.encode('utf-8'))
             oprot.writeFieldEnd()
         if self.details is not None:
             oprot.writeFieldBegin("details", TType.MAP, 3)
             oprot.writeMapBegin(TType.STRING, TType.STRING, len(self.details))
             for kiter7, viter8 in self.details.items():
-                oprot.writeString(kiter7.encode("utf-8") if sys.version_info[0] == 2 else kiter7)
-                oprot.writeString(viter8.encode("utf-8") if sys.version_info[0] == 2 else viter8)
+                oprot.writeString(kiter7.encode('utf-8'))
+                oprot.writeString(viter8.encode('utf-8'))
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
         if self.retryable is not None:

@@ -8,7 +8,7 @@
 import logging
 import sys
 
-from thrift.protocol.TProtocol import TProtocolException
+from thrift.protocol import TProtocolException
 from thrift.Thrift import TApplicationException
 from thrift.Thrift import TException
 from thrift.Thrift import TFrozenDict
@@ -86,24 +86,24 @@ class Client(Iface):
         return self.recv_is_healthy()
 
     def send_is_healthy(self, request):
-        self._oprot.writeMessageBegin("is_healthy", TMessageType.CALL, self._seqid)
+        self._oprot.write_message_begin("is_healthy", TMessageType.CALL, self._seqid)
         args = is_healthy_args()
         args.request = request
         args.write(self._oprot)
-        self._oprot.writeMessageEnd()
+        self._oprot.write_message_end()
         self._oprot.trans.flush()
 
     def recv_is_healthy(self):
         iprot = self._iprot
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        (fname, mtype, rseqid) = iprot.read_message_begin()
         if mtype == TMessageType.EXCEPTION:
             x = TApplicationException()
             x.read(iprot)
-            iprot.readMessageEnd()
+            iprot.read_message_end()
             raise x
         result = is_healthy_result()
         result.read(iprot)
-        iprot.readMessageEnd()
+        iprot.read_message_end()
         if result.success is not None:
             return result.success
         raise TApplicationException(
@@ -122,18 +122,18 @@ class Processor(Iface, TProcessor):
         self._on_message_begin = func
 
     def process(self, iprot, oprot):
-        (name, type, seqid) = iprot.readMessageBegin()
+        (name, type, seqid) = iprot.read_message_begin()
         if self._on_message_begin:
             self._on_message_begin(name, type, seqid)
         if name not in self._processMap:
             iprot.skip(TType.STRUCT)
-            iprot.readMessageEnd()
+            iprot.read_message_end()
             x = TApplicationException(
                 TApplicationException.UNKNOWN_METHOD, "Unknown function %s" % (name)
             )
-            oprot.writeMessageBegin(name, TMessageType.EXCEPTION, seqid)
+            oprot.write_message_begin(name, TMessageType.EXCEPTION, seqid)
             x.write(oprot)
-            oprot.writeMessageEnd()
+            oprot.write_message_end()
             oprot.trans.flush()
             return
         else:
@@ -143,7 +143,7 @@ class Processor(Iface, TProcessor):
     def process_is_healthy(self, seqid, iprot, oprot):
         args = is_healthy_args()
         args.read(iprot)
-        iprot.readMessageEnd()
+        iprot.read_message_end()
         result = is_healthy_result()
         try:
             result.success = self._handler.is_healthy(args.request)
@@ -158,9 +158,9 @@ class Processor(Iface, TProcessor):
             logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
-        oprot.writeMessageBegin("is_healthy", msg_type, seqid)
+        oprot.write_message_begin("is_healthy", msg_type, seqid)
         result.write(oprot)
-        oprot.writeMessageEnd()
+        oprot.write_message_end()
         oprot.trans.flush()
 
 
@@ -190,9 +190,9 @@ class is_healthy_args(object):
         ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
-        iprot.readStructBegin()
+        iprot.read_struct_begin()
         while True:
-            (fname, ftype, fid) = iprot.readFieldBegin()
+            (fname, ftype, fid) = iprot.read_field_begin()
             if ftype == TType.STOP:
                 break
             if fid == 1:
@@ -203,20 +203,20 @@ class is_healthy_args(object):
                     iprot.skip(ftype)
             else:
                 iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
+            iprot.read_field_end()
+        iprot.read_struct_end()
 
     def write(self, oprot):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin("is_healthy_args")
+        oprot.write_struct_begin("is_healthy_args")
         if self.request is not None:
-            oprot.writeFieldBegin("request", TType.STRUCT, 1)
+            oprot.write_field_begin("request", TType.STRUCT, 1)
             self.request.write(oprot)
-            oprot.writeFieldEnd()
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
+            oprot.write_field_end()
+        oprot.write_field_stop()
+        oprot.write_struct_end()
 
     def validate(self):
         return
@@ -275,32 +275,32 @@ class is_healthy_result(object):
         ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
-        iprot.readStructBegin()
+        iprot.read_struct_begin()
         while True:
-            (fname, ftype, fid) = iprot.readFieldBegin()
+            (fname, ftype, fid) = iprot.read_field_begin()
             if ftype == TType.STOP:
                 break
             if fid == 0:
                 if ftype == TType.BOOL:
-                    self.success = iprot.readBool()
+                    self.success = iprot.read_bool()
                 else:
                     iprot.skip(ftype)
             else:
                 iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
+            iprot.read_field_end()
+        iprot.read_struct_end()
 
     def write(self, oprot):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin("is_healthy_result")
+        oprot.write_struct_begin("is_healthy_result")
         if self.success is not None:
-            oprot.writeFieldBegin("success", TType.BOOL, 0)
-            oprot.writeBool(self.success)
-            oprot.writeFieldEnd()
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
+            oprot.write_field_begin("success", TType.BOOL, 0)
+            oprot.write_bool(self.success)
+            oprot.write_field_end()
+        oprot.write_field_stop()
+        oprot.write_struct_end()
 
     def validate(self):
         return
