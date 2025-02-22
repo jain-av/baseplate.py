@@ -5,10 +5,12 @@ from typing import Any, Optional
 import redis
 
 # redis.client.StrictPipeline was renamed to redis.client.Pipeline in version 3.0
-try:
-    from redis.client import StrictPipeline as Pipeline  # type: ignore
-except ImportError:
-    from redis.client import Pipeline
+# try:
+#     from redis.client import StrictPipeline as Pipeline  # type: ignore
+# except ImportError:
+#     from redis.client import Pipeline
+
+from redis.client import Pipeline
 
 from prometheus_client import Counter, Gauge, Histogram
 
@@ -198,7 +200,7 @@ class RedisContextFactory(ContextFactory):
 
 
 # pylint: disable=too-many-public-methods
-class MonitoredRedisConnection(redis.StrictRedis):
+class MonitoredRedisConnection(redis.Redis):
     """Redis connection that collects diagnostic information.
 
     This connection acts like :py:class:`redis.StrictRedis` except that all
@@ -266,6 +268,69 @@ class MonitoredRedisConnection(redis.StrictRedis):
         :param name: The name to attach to diagnostics for this pipeline.
         :param transaction: Whether or not the commands in the pipeline
             are wrapped with a transaction and executed atomically.
+        """
+        return MonitoredRedisPipeline(
+            self.context_name, name, self.server_span, self.connection_pool, transaction, self.redis_client_name
+        )
+
+
+class MonitoredRedisPipeline(Pipeline):  # type: ignore
+    """Redis pipeline that collects diagnostic information.
+
+    This pipeline acts like :py:class:`redis.Pipeline` except that all
+    operations are automatically wrapped with diagnostic collection.
+
+    :param context_name: The name of the context this client is attached to.
+    :param server_span: The server span to attach diagnostic information to.
+    :param connection_pool: The connection pool to use.
+    :param transaction: Whether or not the commands in the pipeline
+        are wrapped with a transaction and executed atomically.
+
+    """
+
+    def __init__(
+        self,
+        client_context_name: str,
+        pipeline_name: str,
+        server_span: Span,
+        connection_pool: redis.ConnectionPool,
+        transaction: bool = True,
+        redis_client_name: str = "",
+    ):
+        self.context_name = client_context_name
+        self.pipeline_name = pipeline_name
+        self.server_span = server_span
+        self.redis_client_name = redis_client_name
+
+        super().__init__(connection_pool=connection_pool, transaction=transaction)
+
+    def execute(self, raise_on_error: bool = True) -> Any:
+        trace_name = f"{self.context_name}.{self.pipeline_name}.execute"
+
+        labels = {
+            f"{PROM_LABELS_PREFIX}_command": "pipeline",
+            f"{PROM_LABELS_PREFIX}_client_name": self.redis_client_name,
+            f"{PROM_LABELS_PREFIX}_database": self.connection_pool.connection_kwargs.get("db", ""),
+            f"{PROM_LABELS_PREFIX}_type": "pipeline",
+        }
+        with (
+            self.server_span.make_child(trace_name),
+            ACTIVE_REQUESTS.labels(**labels).track_inprogress(),
+        ):
+            start_time = perf_counter()
+            success = "true"
+            try:
+                return super().execute(raise_on_error=raise_on_error)
+            except redis.RedisError:
+                success = "false"
+                raise
+            except:  # noqa: E722
+                success = "false"
+                raise
+            finally:
+                result_labels = {**labels, f"{PROM_LABELS_PREFIX}_success": success}
+                REQUESTS_TOTAL.labels(**result_labels).inc()
+                LATENCY_SECONDS.labels(**result_labels).observe(perf_counter() - start_time)
 
         """
         return MonitoredRedisPipeline(
@@ -297,7 +362,7 @@ class MonitoredRedisPipeline(Pipeline):
         self.trace_name = trace_name
         self.server_span = server_span
         self.redis_client_name = redis_client_name
-        super().__init__(connection_pool, response_callbacks, **kwargs)
+        super().__init__(connection_pool, **kwargs)
 
     # pylint: disable=arguments-differ
     def execute(self, **kwargs: Any) -> Any:
