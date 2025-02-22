@@ -62,11 +62,20 @@ class Client(Iface):
 
     """
 
-    def __init__(self, iprot, oprot=None):
-        self._iprot = self._oprot = iprot
-        if oprot is not None:
-            self._oprot = oprot
+    def __init__(self, trans, oprot_factory):
+        self._trans = trans
+        self._oprot_factory = oprot_factory
         self._seqid = 0
+        self._oprot = self.input_protocol = self.output_protocol = None
+
+    def open(self):
+        self._trans.open()
+        self._oprot = self.input_protocol = self.output_protocol = self._oprot_factory.getProtocol(
+            self._trans
+        )
+
+    def close(self):
+        self._trans.close()
 
     def is_healthy(self):
         """
@@ -91,7 +100,7 @@ class Client(Iface):
         self._oprot.trans.flush()
 
     def recv_is_healthy(self):
-        iprot = self._iprot
+        iprot = self._oprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
             x = TApplicationException()

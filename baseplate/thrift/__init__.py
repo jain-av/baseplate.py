@@ -1,1 +1,1 @@
-__all__ = ["ttypes", "constants", "BaseplateService", "BaseplateServiceV2"]
+__all__ = ["ttypes", "constants", "BaseplateService"]

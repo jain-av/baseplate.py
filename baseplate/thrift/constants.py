@@ -13,6 +13,7 @@ from thrift.Thrift import TException
 from thrift.Thrift import TFrozenDict
 from thrift.Thrift import TMessageType
 from thrift.Thrift import TType
+from thrift.transport import TTransport
 from thrift.TRecursive import fix_spec
 
 from .ttypes import *
