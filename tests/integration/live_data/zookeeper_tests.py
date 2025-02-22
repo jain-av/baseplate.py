@@ -9,6 +9,7 @@ try:
     from kazoo.handlers.gevent import SequentialGeventHandler
     from kazoo.handlers.threading import SequentialThreadingHandler
     from kazoo.retry import KazooRetry
+    from sqlalchemy import create_engine
 except ImportError:
     raise unittest.SkipTest("kazoo is not installed")
 

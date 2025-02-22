@@ -56,13 +56,15 @@ class LiveDataWriterTests(unittest.TestCase):
         self.assertFalse(did_write)
 
     def test_successful_set(self):
-        self.assertEqual(self.zookeeper.get(TEST_NODE_PATH)[0], b"")
+        data, stat = self.zookeeper.get(TEST_NODE_PATH)
+        self.assertEqual(data, b"")
 
         input = BytesIO(b"new_data")
         did_write = write_file_to_zookeeper(self.zookeeper, input, TEST_NODE_PATH)
         self.assertTrue(did_write)
 
-        self.assertEqual(self.zookeeper.get(TEST_NODE_PATH)[0], b"new_data")
+        data, stat = self.zookeeper.get(TEST_NODE_PATH)
+        self.assertEqual(data, b"new_data")
 
     def test_version_changed(self):
         # this is a horrible hack. we want to test what happens if the contents
