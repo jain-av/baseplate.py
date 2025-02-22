@@ -8,8 +8,8 @@ from baseplate.frameworks.pyramid import BaseplateConfigurator
 
 @view_config(route_name="hello_world", renderer="json")
 def hello_world(request):
-    result = request.db.execute("SELECT date('now');")
-    return {"Hello": "World", "Now": result.scalar()}
+    result = request.db.execute("SELECT date('now');").scalar()
+    return {"Hello": "World", "Now": result}
 
 
 def make_wsgi_app(app_config):
