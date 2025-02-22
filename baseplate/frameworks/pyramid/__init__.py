@@ -16,6 +16,7 @@ from pyramid.config import Configurator
 from pyramid.registry import Registry
 from pyramid.request import Request
 from pyramid.response import Response
+from sqlalchemy import func, select
 
 from baseplate import Baseplate, RequestContext, Span, TraceInfo
 from baseplate.lib.edgecontext import EdgeContextFactory
@@ -27,6 +28,290 @@ from baseplate.lib.prometheus_metrics import (
 from baseplate.thrift.ttypes import IsHealthyProbe
 
 logger = logging.getLogger(__name__)
+
+
+class SpanFinishingAppIterWrapper(Iterable):
+    """Wrapper for Response.app_iter that finishes the span when the iterator is done.
+
+    The WSGI spec expects applications to return an iterable object. In the
+    common case, the iterable is a single-item list containing a byte string of
+    the full response. However, if the application wants to stream a response
+    back to the client (e.g. it's sending a lot of data, or it wants to get
+    some bytes on the wire really quickly before some database calls finish)
+    the iterable can take a while to finish iterating.
+
+    This wrapper allows us to keep the server span open until the iterable is
+    finished even though our view callable returned long ago.
+
+    """
+
+    def __init__(self, app_iter: Iterator[bytes], span: Optional[Span] = None) -> None:
+        self.span = span
+        self.app_iter = iter(app_iter)
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self
+
+    def __next__(self) -> bytes:
+        try:
+            return next(self.app_iter)
+        except StopIteration:
+            trace.get_current_span().set_status(trace.status.StatusCode.OK)
+            if self.span:
+                self.span.finish()
+            raise
+        except Exception as e:
+            trace.get_current_span().set_status(trace.status.StatusCode.ERROR)
+            trace.get_current_span().record_exception(e)
+            if self.span:
+                self.span.finish(exc_info=sys.exc_info())
+            raise
+
+    def close(self) -> None:
+        if hasattr(self.app_iter, "close"):
+            self.app_iter.close()
+
+
+PROM_NAMESPACE = "http_server"
+
+HISTOGRAM_LABELS = [
+    "http_method",
+    "http_endpoint",
+    "http_success",
+]
+REQUEST_LATENCY = Histogram(
+    f"{PROM_NAMESPACE}_latency_seconds",
+    "Time spent processing requests",
+    HISTOGRAM_LABELS,
+    buckets=default_latency_buckets,
+)
+REQUEST_SIZE = Histogram(
+    f"{PROM_NAMESPACE}_request_size_bytes",
+    "Size of incoming requests in bytes",
+    HISTOGRAM_LABELS,
+    buckets=default_size_buckets,
+)
+RESPONSE_SIZE = Histogram(
+    f"{PROM_NAMESPACE}_response_size_bytes",
+    "Size of outgoing responses in bytes",
+    HISTOGRAM_LABELS,
+    buckets=default_size_buckets,
+)
+REQUESTS_TOTAL = Counter(
+    f"{PROM_NAMESPACE}_requests_total",
+    "Total number of request handled",
+    [
+        *HISTOGRAM_LABELS,
+        "http_response_code",
+    ],
+)
+ACTIVE_REQUESTS = Gauge(
+    f"{PROM_NAMESPACE}_active_requests",
+    "Current requests in flight",
+    [
+        "http_method",
+        "http_endpoint",
+    ],
+    multiprocess_mode="livesum",
+)
+
+
+def _make_baseplate_tween(
+    handler: Callable[[Request], Response], _registry: Registry
+) -> Callable[[Request], Response]:
+    def baseplate_tween(request: Request) -> Response:
+        response: Optional[Response] = None
+
+        try:
+            response = handler(request)
+            if request.span:
+                request.span.set_tag("http.response_length", response.content_length)
+        except Exception as e:
+            trace.get_current_span().set_status(trace.status.StatusCode.ERROR)
+            trace.get_current_span().record_exception(e)
+            if hasattr(request, "span") and request.span:
+                request.span.finish(exc_info=sys.exc_info())
+            raise
+        else:
+            trace.get_current_span().set_status(trace.status.StatusCode.OK)
+            content_length = response.content_length
+            if request.span:
+                request.span.set_tag("http.status_code", response.status_code)
+                response.app_iter = SpanFinishingAppIterWrapper(response.app_iter, request.span)
+                response.content_length = content_length
+            else:
+                response.app_iter = SpanFinishingAppIterWrapper(response.app_iter)
+                response.content_length = content_length
+        finally:
+            manually_close_request_metrics(request, response)
+
+            # avoid a reference cycle
+            request.start_server_span = None
+        return response
+
+    return baseplate_tween
+
+
+def manually_close_request_metrics(request: Request, response: Optional[Response] = None) -> None:
+    """
+    Close the request metrics and track the remaining bits of the request
+
+    This is called both from the tween, but also available as a mechanism for pyramid scripting
+    to mark that the request has finished.
+    """
+    # ensure any active counters have been incremented before decrementing them and tracking the
+    # rest of the request
+    if getattr(request, "reddit_prom_metrics_enabled", False):
+        http_endpoint = ""
+        if (
+            hasattr(request, "reddit_tracked_endpoint")
+            and request.reddit_tracked_endpoint is not None
+        ):
+            http_endpoint = request.reddit_tracked_endpoint
+        elif request.matched_route:
+            http_endpoint = (
+                request.matched_route.pattern
+                if (hasattr(request.matched_route, "pattern") and request.matched_route.pattern)
+                else request.matched_route.name
+            )
+        else:
+            http_endpoint = "404"
+
+        http_method = request.method.lower()
+        http_response_code = ""
+
+        if sys.exc_info() == (None, None, None):
+            if response:
+                http_success = (
+                    getHTTPSuccessLabel(int(response.status_code)) if response else "false"
+                )
+                http_response_code = response.status_code if response else ""
+            else:
+                http_success = "true"
+                http_response_code = "200"
+        else:
+            http_success = "false"
+
+        histogram_labels = {
+            "http_method": http_method,
+            "http_endpoint": http_endpoint,
+            "http_success": http_success,
+        }
+
+        ACTIVE_REQUESTS.labels(http_method=http_method, http_endpoint=http_endpoint).dec()
+        REQUESTS_TOTAL.labels(
+            **{
+                **histogram_labels,
+                "http_response_code": http_response_code,
+            }
+        ).inc()
+
+        if hasattr(request, "reddit_start_time") and request.reddit_start_time is not None:
+            # note this is set in _on_new_request
+            REQUEST_LATENCY.labels(**histogram_labels).observe(
+                time.perf_counter() - request.reddit_start_time
+            )
+
+        # do it this way for tests and for services that bastardize the request object
+        # for script execution where this may not be set
+        if hasattr(request, "content_length") and request.content_length is not None:
+            REQUEST_SIZE.labels(**histogram_labels).observe(request.content_length)
+
+        # response may not be set if this handler is called from a pyramid script handler
+        if response:
+            if hasattr(response, "content_length") and response.content_length is not None:
+                RESPONSE_SIZE.labels(**histogram_labels).observe(response.content_length)
+
+        # avoid missing a secondary request if the same request object is re-used in scripting
+        request.reddit_prom_metrics_enabled = False
+        request.reddit_start_time = None
+        request.reddit_tracked_endpoint = None
+    else:
+        logger.debug(
+            "Request metrics attempted to be closed but were never opened, no metrics will be tracked"  # noqa: E501
+        )
+
+
+class BaseplateEvent:
+    def __init__(self, request: Request):
+        self.request = request
+
+
+class ServerSpanInitialized(BaseplateEvent):
+    """Event that Baseplate fires after creating the ServerSpan for a Request.
+
+    This event will be emitted before the Request is passed along to it's
+    handler.  Baseplate initializes the ServerSpan in response to a
+    :py:class:`pyramid.events.ContextFound` event emitted by Pyramid so while
+    we can guarantee what Baseplate has done when this event is emitted, we
+    cannot guarantee that any other subscribers to
+    :py:class:`pyramid.events.ContextFound` have been called or not.
+    """
+
+
+class HeaderTrustHandler:
+    """Abstract class used by :py:class:`BaseplateConfigurator` to validate headers.
+
+    See :py:class:`StaticTrustHandler` for the default implementation.
+    """
+
+    def should_trust_trace_headers(self, request: Request) -> bool:
+        """Return whether baseplate should parse the trace headers from the inbound request.
+
+        :param request: The request
+
+        :returns: Whether baseplate should parse the trace headers from the inbound request.
+        """
+        raise NotImplementedError
+
+    def should_trust_edge_context_payload(self, request: Request) -> bool:
+        """Return whether baseplate should trust the edge context headers from the inbound request.
+
+        :param request: The request
+
+        :returns: Whether baseplate should trust the inbound edge context headers
+        """
+        raise NotImplementedError
+
+
+class StaticTrustHandler(HeaderTrustHandler):
+    """Default implementation for handling headers.
+
+import base64
+import logging
+import sys
+import time
+from collections.abc import Iterable, Iterator, Mapping  # pylint: disable=import-error
+from typing import Any, Callable, Optional
+
+import pyramid.events
+import pyramid.request
+import pyramid.tweens
+import webob.request
+from opentelemetry import trace
+from opentelemetry.instrumentation.pyramid import PyramidInstrumentor
+from prometheus_client import Counter, Gauge, Histogram
+from pyramid.config import Configurator
+from pyramid.registry import Registry
+from pyramid.request import Request
+from pyramid.response import Response
+from sqlalchemy import String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from baseplate import Baseplate, RequestContext, Span, TraceInfo
+from baseplate.lib.edgecontext import EdgeContextFactory
+from baseplate.lib.prometheus_metrics import (
+    default_latency_buckets,
+    default_size_buckets,
+    getHTTPSuccessLabel,
+)
+from baseplate.thrift.ttypes import IsHealthyProbe
+
+logger = logging.getLogger(__name__)
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class SpanFinishingAppIterWrapper(Iterable):
@@ -303,6 +588,8 @@ class StaticTrustHandler(HeaderTrustHandler):
 
 # pylint: disable=too-many-ancestors
 class BaseplateRequest(RequestContext, pyramid.request.Request):
+    __allow_unmapped__ = True
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         context_config = kwargs.pop("context_config", None)
         RequestContext.__init__(self, context_config=context_config)
