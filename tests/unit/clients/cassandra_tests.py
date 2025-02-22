@@ -26,6 +26,7 @@ from baseplate.clients.cassandra import (
 )
 from baseplate.lib.config import ConfigurationError
 from baseplate.lib.secrets import SecretsStore
+from sqlalchemy import create_engine
 
 logger = logging.getLogger(__name__)
 
@@ -312,10 +313,10 @@ class CassandraTests(unittest.TestCase):
             event,
         )
         prom_labels = prom_labels_tuple._asdict()
-        prom_labels_w_success = {**prom_labels, **{"cassandra_success": "false"}}
+        prom_labels_w_failure = {**prom_labels, **{"cassandra_success": "false"}}
 
         self.assertEqual(
-            REGISTRY.get_sample_value("cassandra_client_requests_total", prom_labels_w_success), 1
+            REGISTRY.get_sample_value("cassandra_client_requests_total", prom_labels_w_failure), 1
         )
 
         # we start from 0 here since this is a unit test, so -1 is the expected result
@@ -326,7 +327,7 @@ class CassandraTests(unittest.TestCase):
         self.assertEqual(
             REGISTRY.get_sample_value(
                 "cassandra_client_latency_seconds_bucket",
-                {**prom_labels_w_success, **{"le": "+Inf"}},
+                {**prom_labels_w_failure, **{"le": "+Inf"}},
             ),
             1,
         )

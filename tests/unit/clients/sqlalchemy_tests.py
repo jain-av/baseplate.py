@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 try:
-    from sqlalchemy.engine.url import URL
+    from sqlalchemy.engine import make_url
 except ImportError:
     raise unittest.SkipTest("sqlalchemy is not installed")
 
@@ -30,7 +30,7 @@ class EngineFromConfigTests(unittest.TestCase):
 
     def test_url(self):
         engine = engine_from_config({"database.url": "sqlite://"})
-        self.assertEqual(engine.url, URL("sqlite"))
+        self.assertEqual(engine.url, make_url("sqlite://"))
 
     @mock.patch("baseplate.clients.sqlalchemy.create_engine")
     def test_credentials(self, create_engine_mock):
@@ -45,13 +45,8 @@ class EngineFromConfigTests(unittest.TestCase):
             self.secrets,
         )
         create_engine_mock.assert_called_once_with(
-            URL(
-                drivername="postgresql",
-                username="reddit",
-                password="password",
-                host="localhost",
-                port="9000",
-                database="db",
+            make_url(
+                "postgresql://reddit:password@localhost:9000/db",
             ),
             pool_recycle=60,
             pool_size=10,
