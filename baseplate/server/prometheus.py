@@ -26,7 +26,7 @@ from prometheus_client import (
     multiprocess,
     values,
 )
-from prometheus_client.values import MultiProcessValue
+from prometheus_client.values import MultiprocessValue
 
 from baseplate.lib.config import Endpoint, EndpointConfiguration
 from baseplate.server.net import bind_socket
@@ -70,7 +70,7 @@ def start_prometheus_exporter(address: EndpointConfiguration = PROMETHEUS_EXPORT
         )
         sys.exit(1)
 
-    values.ValueClass = MultiProcessValue(worker_id)
+    values.ValueClass = MultiprocessValue(worker_id)
     atexit.register(multiprocess.mark_process_dead, worker_id())
 
     server_socket = bind_socket(address)

@@ -51,7 +51,7 @@ def get_socket(index: int = 0) -> socket.socket:
     family_name = os.environ.get(f"EINHORN_FD_FAMILY_{index:d}", "AF_INET")
     assert family_name.startswith("AF_"), "invalid socket family name"
     family = getattr(socket, family_name)
-    return socket.fromfd(fileno, family, socket.SOCK_STREAM)
+    return socket.socket(family, socket.SOCK_STREAM, fileno=fileno)
 
 
 def ack_startup() -> None:

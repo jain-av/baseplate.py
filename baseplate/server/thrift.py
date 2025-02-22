@@ -16,6 +16,7 @@ from thrift.transport.TTransport import TBufferedTransportFactory, TTransportExc
 
 from baseplate.lib import config
 from baseplate.server import runtime_monitor
+from sqlalchemy import URL
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)

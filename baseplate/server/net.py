@@ -21,5 +21,5 @@ def bind_socket(endpoint: EndpointConfiguration) -> socket.socket:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
     sock.bind(endpoint.address)
-    sock.listen(128)
+    sock.listen()  # Remove the backlog parameter; it's optional
     return sock
