@@ -273,7 +273,7 @@ class TestKombuMessageHandler:
             ) as active_dec_spy_method:
                 mock_manager.attach_mock(active_dec_spy_method, "dec")
 
-                handler = KombuMessageHandler(baseplate, name, handler_fn, error_handler_fn)
+                handler = KombuMessageHandler(baseplate, name, handler_fn, error_handler=error_handler_fn)
                 with expectation:
                     handler.handle(message)
                 error_handler_fn.assert_called_once_with(context, message.decode(), message, err)
@@ -461,7 +461,7 @@ class TestQueueConsumerFactory:
                 queue_name=name,
                 routing_keys=routing_keys,
                 handler_fn=lambda ctx, body, msg: True,
-                error_handler_fn=lambda ctx, body, msg: True,
+                error_handler=lambda ctx, body, msg: True,
                 health_check_fn=health_check_fn,
                 worker_kwargs=worker_kwargs,
             )
@@ -480,7 +480,7 @@ class TestQueueConsumerFactory:
             queue_name=name,
             routing_keys=routing_keys,
             handler_fn=handler_fn,
-            error_handler_fn=error_handler_fn,
+            error_handler=error_handler_fn,
             health_check_fn=health_check_fn,
             worker_kwargs=worker_kwargs,
         )
@@ -488,7 +488,7 @@ class TestQueueConsumerFactory:
         assert factory.connection == connection
         assert factory.name == name
         assert factory.handler_fn == handler_fn
-        assert factory.error_handler_fn == error_handler_fn
+        assert factory.error_handler == error_handler_fn
         assert factory.health_check_fn == health_check_fn
         for routing_key, queue in zip(routing_keys, factory.queues):
             assert queue.routing_key == routing_key
@@ -525,7 +525,7 @@ class TestQueueConsumerFactory:
 
 @pytest.fixture
 def queues(name, exchange, routing_keys):
-    return [kombu.Queue(name=name, exchange=exchange, routing_key=key) for key in routing_keys]
+    return [kombu.Queue(name=name, exchange=exchange, routing_key=key, channel=None) for key in routing_keys]
 
 
 class TestKombuConsumerWorker:
