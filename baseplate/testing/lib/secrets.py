@@ -1,6 +1,8 @@
 from baseplate import Span
 from baseplate.lib.secrets import SecretsStore, parse_secrets_fetcher
+from baseplate.lib.file_watcher import FileWatcher
 from baseplate.testing.lib.file_watcher import FakeFileWatcher
+from sqlalchemy import create_engine
 
 
 class FakeSecretsStore(SecretsStore):
