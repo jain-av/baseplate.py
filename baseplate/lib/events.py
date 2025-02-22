@@ -57,7 +57,7 @@ def serialize_v2_event(event: Any) -> bytes:
     :param event: A Thrift struct from the event schemas.
 
     """
-    return TSerialization.serialize(event, _V2_PROTOCOL_FACTORY)
+    return TSerialization.serialize(event, protocol_factory=_V2_PROTOCOL_FACTORY)
 
 
 class EventLogger:

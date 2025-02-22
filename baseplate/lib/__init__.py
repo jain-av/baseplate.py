@@ -8,6 +8,8 @@ from typing import Any, Callable, Generic, TypeVar, overload
 
 from typing_extensions import Self
 
+from sqlalchemy.util import deprecated
+
 
 def warn_deprecated(message: str) -> None:
     """Emit a deprecation warning from the caller.
@@ -17,7 +19,7 @@ def warn_deprecated(message: str) -> None:
     most easily see where in _their_ code the deprecation is coming from.
 
     """
-    warnings.warn(message, DeprecationWarning, stacklevel=3)
+    deprecated(message, stacklevel=3)
 
 
 T = TypeVar("T")  # Type of the class instance which the property is attached to.

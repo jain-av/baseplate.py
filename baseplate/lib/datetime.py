@@ -17,12 +17,12 @@ def datetime_to_epoch_seconds(dt: datetime) -> int:
 
 def epoch_milliseconds_to_datetime(ms: int) -> datetime:
     """Convert epoch milliseconds to UTC datetime."""
-    return datetime.utcfromtimestamp(ms / 1000).replace(tzinfo=timezone.utc)
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
 
 
 def epoch_seconds_to_datetime(sec: int) -> datetime:
     """Convert epoch seconds to UTC datetime."""
-    return datetime.utcfromtimestamp(sec).replace(tzinfo=timezone.utc)
+    return datetime.fromtimestamp(sec, tz=timezone.utc)
 
 
 def get_utc_now() -> datetime:

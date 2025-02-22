@@ -30,7 +30,7 @@ class RateLimited(Sampler):
         parent_context: Optional[Context],
         trace_id: int,
         name: str,
-        kind: Optional[SpanKind] = None,
+        kind: SpanKind = SpanKind.INTERNAL,
         attributes: Attributes = None,
         links: Optional[Sequence[Link]] = None,
         trace_state: Optional[TraceState] = None,

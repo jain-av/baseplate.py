@@ -8,7 +8,9 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         try:
             span = trace.get_current_span()
             if span.is_recording():
-                log_record["traceID"] = trace.format_trace_id(span.get_span_context().trace_id)
+                log_record["traceID"] = trace.format_trace_id(
+                    span.get_span_context().trace_id
+                )
         except (KeyError, ValueError, TypeError):
             pass
         return super().process_log_record(log_record)

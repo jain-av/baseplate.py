@@ -13,7 +13,7 @@ from opentelemetry.propagators.textmap import (
     default_getter,
     default_setter,
 )
-from opentelemetry.trace import format_span_id
+from opentelemetry.trace import format_span_id, TraceFlags
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,6 @@ class RedditB3ThriftFormat(TextMapPropagator):
             "Extracted sampled from carrier. [carrier=%s, context=%s, sampled=%s]",
             carrier,
             context,
-            sampled,
         )
         flags = _extract_first_element(getter.get(carrier, self.FLAGS_KEY))
         logger.debug(
@@ -99,7 +98,7 @@ class RedditB3ThriftFormat(TextMapPropagator):
         # the desire for some form of sampling, propagate if either
         # header is set to allow.
         if sampled in self._SAMPLE_PROPAGATE_VALUES or flags == "1":
-            options |= trace.TraceFlags.SAMPLED
+            options |= TraceFlags.SAMPLED
             logger.debug("Set trace to sampled. [carrier=%s, context=%s]", carrier, context)
 
         return trace.set_span_in_context(
@@ -108,7 +107,7 @@ class RedditB3ThriftFormat(TextMapPropagator):
                     trace_id=trace_id,
                     span_id=span_id,
                     is_remote=True,
-                    trace_flags=trace.TraceFlags(options),
+                    trace_flags=TraceFlags(options),
                     trace_state=trace.TraceState(),
                 )
             ),
@@ -127,7 +126,7 @@ class RedditB3ThriftFormat(TextMapPropagator):
         if span_context == trace.INVALID_SPAN_CONTEXT:
             return
 
-        sampled = (trace.TraceFlags.SAMPLED & span_context.trace_flags) != 0
+        sampled = (TraceFlags.SAMPLED & span_context.trace_flags) != 0
         setter.set(
             carrier,
             self.TRACE_ID_KEY,
