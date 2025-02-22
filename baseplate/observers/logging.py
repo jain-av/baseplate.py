@@ -1,6 +1,7 @@
 import threading
 
 from baseplate import BaseplateObserver, RequestContext, Span
+from sqlalchemy import exc
 
 
 class LoggingBaseplateObserver(BaseplateObserver):

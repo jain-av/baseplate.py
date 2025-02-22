@@ -68,4 +68,4 @@ class TimeoutServerSpanObserver(SpanObserver):
         self.timeout.start()
 
     def on_finish(self, exc_info: Optional[_ExcInfo]) -> None:
-        self.timeout.close()
+        self.timeout.cancel()

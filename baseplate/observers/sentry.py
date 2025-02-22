@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
+from sentry_sdk.transport import Transport
 
 from baseplate import BaseplateObserver, RequestContext, ServerSpanObserver, Span, _ExcInfo
 from baseplate.lib import config
@@ -65,23 +66,26 @@ def init_sentry_client_from_config(raw_config: config.RawConfig, **kwargs: Any) 
         },
     )
 
+    options: dict[str, Any] = {}
+
     if cfg.sentry.dsn:
-        kwargs.setdefault("dsn", cfg.sentry.dsn)
+        options["dsn"] = cfg.sentry.dsn
 
     if cfg.sentry.environment:
-        kwargs.setdefault("environment", cfg.sentry.environment)
+        options["environment"] = cfg.sentry.environment
 
-    kwargs.setdefault("sample_rate", cfg.sentry.sample_rate)
+    options["sample_rate"] = cfg.sentry.sample_rate
 
     ignore_errors: list[type | str] = []
     ignore_errors.extend(ALWAYS_IGNORE_ERRORS)
     ignore_errors.extend(cfg.sentry.ignore_errors)
-    kwargs.setdefault("ignore_errors", ignore_errors)
+    options["ignore_errors"] = ignore_errors
 
-    kwargs.setdefault("with_locals", False)
+    options["with_locals"] = False
 
-    client = sentry_sdk.Client(**kwargs)
-    sentry_sdk.Hub.current.bind_client(client)
+    options.update(kwargs)
+
+    sentry_sdk.init(**options)
 
 
 class SentryBaseplateObserver(BaseplateObserver):
@@ -92,18 +96,18 @@ class SentryBaseplateObserver(BaseplateObserver):
     """
 
     def on_server_span_created(self, context: RequestContext, server_span: Span) -> None:
-        sentry_hub = sentry_sdk.Hub.current
-        observer = _SentryServerSpanObserver(sentry_hub, server_span)
+        hub = sentry_sdk.Hub.current
+        observer = _SentryServerSpanObserver(hub, server_span)
         server_span.register(observer)
-        context.sentry = sentry_hub
+        context.sentry = hub
 
 
 class _SentryServerSpanObserver(ServerSpanObserver):
     def __init__(self, sentry_hub: sentry_sdk.Hub, server_span: Span):
         self.sentry_hub = sentry_hub
-        self.scope_manager = self.sentry_hub.push_scope()
-        self.scope = self.scope_manager.__enter__()
+        self.scope = sentry_sdk.Scope()
         self.server_span = server_span
+        self.sentry_hub.push_scope(self.scope)
 
     def on_start(self) -> None:
         self.scope.set_tag("trace_id", self.server_span.trace_id)
@@ -117,7 +121,7 @@ class _SentryServerSpanObserver(ServerSpanObserver):
     def on_finish(self, exc_info: _ExcInfo | None = None) -> None:
         if exc_info is not None:
             self.sentry_hub.capture_exception(error=exc_info)
-        self.scope_manager.__exit__(None, None, None)
+        self.sentry_hub.pop_scope()
 
 
 class _SentryUnhandledErrorReporter:

@@ -117,13 +117,13 @@ class TaggedMetricsServerSpanObserver(SpanObserver):
         filtered_tags = {k: v for (k, v) in self.tags.items() if k in self.allowlist}
 
         for key, delta in self.counters.items():
-            self.batch.counter(key, filtered_tags).increment(delta, sample_rate=self.sample_rate)
+            self.batch.counter(key, tags=filtered_tags).increment(delta, sample_rate=self.sample_rate)
 
         self.timer.update_tags(filtered_tags)
         self.timer.stop()
 
         self.batch.counter(
-            f"{self.base_name}.rate", {**filtered_tags, "success": not exc_info}
+            f"{self.base_name}.rate", tags={**filtered_tags, "success": not exc_info}
         ).increment(sample_rate=self.sample_rate)
 
         self.batch.flush()
@@ -168,14 +168,14 @@ class TaggedMetricsLocalSpanObserver(SpanObserver):
         filtered_tags = {k: v for (k, v) in self.tags.items() if k in self.allowlist}
 
         for key, delta in self.counters.items():
-            self.batch.counter(key, filtered_tags).increment(delta, sample_rate=self.sample_rate)
+            self.batch.counter(key, tags=filtered_tags).increment(delta, sample_rate=self.sample_rate)
 
         self.timer.update_tags(filtered_tags)
         self.timer.stop()
 
         self.batch.counter(
             f"{self.base_name}.rate",
-            {**filtered_tags, "success": not exc_info},
+            tags={**filtered_tags, "success": not exc_info},
         ).increment(sample_rate=self.sample_rate)
 
         self.batch.flush()
@@ -208,14 +208,14 @@ class TaggedMetricsClientSpanObserver(SpanObserver):
         filtered_tags = {k: v for (k, v) in self.tags.items() if k in self.allowlist}
 
         for key, delta in self.counters.items():
-            self.batch.counter(key, filtered_tags).increment(delta, sample_rate=self.sample_rate)
+            self.batch.counter(key, tags=filtered_tags).increment(delta, sample_rate=self.sample_rate)
 
         self.timer.update_tags(filtered_tags)
         self.timer.stop()
 
         self.batch.counter(
             f"{self.base_name}.rate",
-            {**filtered_tags, "success": not exc_info},
+            tags={**filtered_tags, "success": not exc_info},
         ).increment(sample_rate=self.sample_rate)
 
         self.batch.flush()
