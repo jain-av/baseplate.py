@@ -12,7 +12,7 @@ from baseplate.lib.retry import RetryPolicy
 class FileWatcherTests(unittest.TestCase):
     def test_file_not_found_throws_error(self):
         mock_parser = mock.Mock()
-        watcher = file_watcher.FileWatcher("/does_not_exist", mock_parser)
+        watcher = file_watcher.FileWatcher("/does_not_exist", parser=mock_parser)
         with self.assertRaises(file_watcher.WatchedFileNotAvailableError):
             watcher.get_data()
         self.assertEqual(mock_parser.call_count, 0)
@@ -22,7 +22,7 @@ class FileWatcherTests(unittest.TestCase):
             watched_file.write(b"hello!")
             watched_file.flush()
             mock_parser = mock.Mock()
-            watcher = file_watcher.FileWatcher(watched_file.name, mock_parser)
+            watcher = file_watcher.FileWatcher(watched_file.name, parser=mock_parser)
 
             result = watcher.get_data()
             self.assertEqual(result, mock_parser.return_value)
@@ -123,7 +123,7 @@ class FileWatcherTests(unittest.TestCase):
             ) as open_mock:
                 watcher.get_data()
             open_mock.assert_called_once_with(
-                watched_file.name, encoding=None, mode="rb", newline=None
+                watched_file.name, mode="rb", encoding=None, newline=None
             )
 
             watcher = file_watcher.FileWatcher(
@@ -146,7 +146,7 @@ class FileWatcherTests(unittest.TestCase):
             ) as open_mock:
                 watcher.get_data()
             open_mock.assert_called_once_with(
-                watched_file.name, encoding="UTF-8", mode="r", newline=None
+                watched_file.name, mode="r", encoding="UTF-8", newline=None
             )
 
             watcher = file_watcher.FileWatcher(
@@ -159,12 +159,12 @@ class Py3FileWatcherTests(unittest.TestCase):
     def test_cant_set_encoding_and_binary(self):
         mock_parser = mock.Mock()
         with self.assertRaises(TypeError):
-            file_watcher.FileWatcher("/does_not_exist", mock_parser, binary=True, encoding="utf-8")
+            file_watcher.FileWatcher("/does_not_exist", parser=mock_parser, binary=True, encoding="utf-8")
 
     def test_cant_set_newline_and_binary(self):
         mock_parser = mock.Mock()
         with self.assertRaises(TypeError):
-            file_watcher.FileWatcher("/does_not_exist", mock_parser, binary=True, newline="\n")
+            file_watcher.FileWatcher("/does_not_exist", parser=mock_parser, binary=True, newline="\n")
 
     def test_encoding_option(self):
         file_path = os.path.abspath("tests/data/file_watcher_tests.json")

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from baseplate.lib import config
+from baseplate import config
 
 
 class StringTests(unittest.TestCase):

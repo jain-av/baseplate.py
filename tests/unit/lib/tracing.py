@@ -5,6 +5,7 @@ import gevent
 from gevent import select
 from opentelemetry import trace
 from opentelemetry.test.test_base import TestBase
+from sqlalchemy import exc
 
 from baseplate.lib.tracing import patch_greenlet_tracing, unpatch_greenlet_tracing
 
@@ -27,7 +28,10 @@ class TestGevent(PatchedTestCase, TestBase):
 
         def gr1():
             with trace.get_tracer("gr1").start_as_current_span("child"):
-                select.select([], [], [], 2)
+                try:
+                    select.select([], [], [], 2)
+                except exc.RemovedIn20Warning:
+                    pass
 
         with trace.get_tracer(__name__).start_as_current_span("parent"):
             gevent.joinall(
@@ -46,7 +50,10 @@ class TestGevent(PatchedTestCase, TestBase):
 
         def gr1():
             with trace.get_tracer("gr1").start_as_current_span("child"):
-                select.select([], [], [], 2)
+                try:
+                    select.select([], [], [], 2)
+                except exc.RemovedIn20Warning:
+                    pass
 
         with trace.get_tracer(__name__).start_as_current_span("parent"):
             gevent.joinall(

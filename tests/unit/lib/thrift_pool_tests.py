@@ -18,13 +18,13 @@ class MakeTransportTests(unittest.TestCase):
         endpoint = config.EndpointConfiguration(socket.AF_INET, ("localhost", 1234))
         socket_transport = thrift_pool._make_transport(endpoint)
 
-        self.assertFalse(socket_transport._unix_socket)
+        self.assertFalse(socket_transport.unix_socket)
 
     def test_unix(self):
         endpoint = config.EndpointConfiguration(socket.AF_UNIX, "/tmp/socket")
         socket_transport = thrift_pool._make_transport(endpoint)
 
-        self.assertTrue(socket_transport._unix_socket)
+        self.assertTrue(socket_transport.unix_socket)
 
     def test_unknown(self):
         endpoint = config.EndpointConfiguration(socket.AF_UNSPEC, None)

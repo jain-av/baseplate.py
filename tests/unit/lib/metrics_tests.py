@@ -3,47 +3,48 @@ import unittest
 from unittest import mock
 
 from baseplate.lib import config, metrics
+from baseplate.lib.metrics import _metric_join, _format_tags, NullTransport, RawTransport, BufferedTransport, BaseClient, Timer, Counter, Gauge, Histogram, Client, Batch, BatchCounter
 
 EXAMPLE_ENDPOINT = config.EndpointConfiguration(socket.AF_INET, ("127.0.0.1", 1234))
 
 
 class MetricJoinTests(unittest.TestCase):
     def test_single_node(self):
-        joined = metrics._metric_join(b"single")
+        joined = _metric_join(b"single")
         self.assertEqual(joined, b"single")
 
     def test_two_nodes(self):
-        joined = metrics._metric_join(b"first", b"second")
+        joined = _metric_join(b"first", b"second")
         self.assertEqual(joined, b"first.second")
 
     def test_subpaths(self):
-        joined = metrics._metric_join(b"first.second", b"third.fourth")
+        joined = _metric_join(b"first.second", b"third.fourth")
         self.assertEqual(joined, b"first.second.third.fourth")
 
     def test_subpaths_with_trailing_dot(self):
-        joined = metrics._metric_join(b"first.", b"second")
+        joined = _metric_join(b"first.", b"second")
         self.assertEqual(joined, b"first.second")
 
     def test_join_null_nodes(self):
-        joined = metrics._metric_join(b"first.", None, b"second", None)
+        joined = _metric_join(b"first.", None, b"second", None)
         self.assertEqual(joined, b"first.second")
 
 
 class FormatTagsTest(unittest.TestCase):
     def test_no_tags(self):
-        formatted_tags = metrics._format_tags(None)
+        formatted_tags = _format_tags(None)
         self.assertIsNone(formatted_tags)
 
     def test_tags(self):
         tags = {"success": True, "error": False}
-        formatted_tags = metrics._format_tags(tags)
+        formatted_tags = _format_tags(tags)
         self.assertEqual(formatted_tags, b",success=True,error=False")
 
 
 class NullTransportTests(unittest.TestCase):
     @mock.patch("socket.socket")
     def test_nothing_sent(self, mock_make_socket):
-        transport = metrics.NullTransport(log_if_unconfigured=False)
+        transport = NullTransport(log_if_unconfigured=False)
         transport.send(b"metric")
         self.assertEqual(mock_make_socket.call_count, 0)
 
@@ -52,7 +53,7 @@ class RawTransportTests(unittest.TestCase):
     @mock.patch("socket.socket")
     def test_sent_immediately(self, mock_make_socket):
         mocket = mock_make_socket.return_value
-        transport = metrics.RawTransport(EXAMPLE_ENDPOINT)
+        transport = RawTransport(EXAMPLE_ENDPOINT)
 
         self.assertEqual(mocket.connect.call_args, mock.call(("127.0.0.1", 1234)))
 
@@ -66,8 +67,8 @@ class BufferedTransportTests(unittest.TestCase):
     @mock.patch("socket.socket")
     def test_buffered(self, mock_make_socket):
         mocket = mock_make_socket.return_value
-        raw_transport = metrics.RawTransport(EXAMPLE_ENDPOINT)
-        transport = metrics.BufferedTransport(raw_transport)
+        raw_transport = RawTransport(EXAMPLE_ENDPOINT)
+        transport = BufferedTransport(raw_transport)
         transport.send(b"a")
         transport.send(b"b")
         transport.send(b"c")
@@ -78,8 +79,8 @@ class BufferedTransportTests(unittest.TestCase):
         self.assertEqual(mocket.sendall.call_args, mock.call(b"a\nb\nc"))
 
     def test_buffered_exception_is_caught(self):
-        raw_transport = metrics.RawTransport(EXAMPLE_ENDPOINT)
-        transport = metrics.BufferedTransport(raw_transport)
+        raw_transport = RawTransport(EXAMPLE_ENDPOINT)
+        transport = BufferedTransport(raw_transport)
         transport.send(b"x" * 65536)
 
         with self.assertRaises(metrics.MessageTooBigTransportError):
@@ -88,23 +89,23 @@ class BufferedTransportTests(unittest.TestCase):
 
 class BaseClientTests(unittest.TestCase):
     def test_encode_namespace(self):
-        transport = mock.Mock(spec=metrics.NullTransport)
+        transport = mock.Mock(spec=NullTransport)
 
-        client = metrics.BaseClient(transport, "name")
+        client = BaseClient(transport, "name")
         self.assertEqual(client.namespace, b"name")
 
         with self.assertRaises(UnicodeEncodeError):
-            metrics.BaseClient(transport, "☃")
+            BaseClient(transport, "☃")
 
 
 class BaseClientFactoriesTests(unittest.TestCase):
     def setUp(self):
-        transport = mock.Mock(spec=metrics.NullTransport)
-        self.client = metrics.BaseClient(transport, "namespace")
+        transport = mock.Mock(spec=NullTransport)
+        self.client = BaseClient(transport, "namespace")
 
     def test_make_timer(self):
         timer = self.client.timer("some_timer")
-        self.assertIsInstance(timer, metrics.Timer)
+        self.assertIsInstance(timer, Timer)
         self.assertEqual(timer.name, b"namespace.some_timer")
 
         with self.assertRaises(UnicodeEncodeError):
@@ -112,7 +113,7 @@ class BaseClientFactoriesTests(unittest.TestCase):
 
     def test_make_counter(self):
         counter = self.client.counter("some_counter")
-        self.assertIsInstance(counter, metrics.Counter)
+        self.assertIsInstance(counter, Counter)
         self.assertEqual(counter.name, b"namespace.some_counter")
 
         with self.assertRaises(UnicodeEncodeError):
@@ -120,7 +121,7 @@ class BaseClientFactoriesTests(unittest.TestCase):
 
     def test_make_gauge(self):
         gauge = self.client.gauge("some_gauge")
-        self.assertIsInstance(gauge, metrics.Gauge)
+        self.assertIsInstance(gauge, Gauge)
         self.assertEqual(gauge.name, b"namespace.some_gauge")
 
         with self.assertRaises(UnicodeEncodeError):
@@ -128,7 +129,7 @@ class BaseClientFactoriesTests(unittest.TestCase):
 
     def test_make_histogram(self):
         histogram = self.client.histogram("some_histogram")
-        self.assertIsInstance(histogram, metrics.Histogram)
+        self.assertIsInstance(histogram, Histogram)
         self.assertEqual(histogram.name, b"namespace.some_histogram")
 
         with self.assertRaises(UnicodeEncodeError):
@@ -137,11 +138,11 @@ class BaseClientFactoriesTests(unittest.TestCase):
 
 class ClientTests(unittest.TestCase):
     def test_make_batch(self):
-        transport = mock.Mock(spec=metrics.NullTransport)
-        client = metrics.Client(transport, "namespace")
+        transport = mock.Mock(spec=NullTransport)
+        client = Client(transport, "namespace")
         batch = client.batch()
 
-        self.assertIsInstance(batch, metrics.Batch)
+        self.assertIsInstance(batch, Batch)
         self.assertEqual(batch.namespace, b"namespace")
 
 
@@ -149,11 +150,11 @@ class BatchTests(unittest.TestCase):
     def setUp(self):
         self.patcher = mock.patch("baseplate.lib.metrics.BufferedTransport", autospec=True)
         self.mock_buffer = self.patcher.start().return_value
-        self.mock_transport = mock.Mock(spec=metrics.NullTransport)
+        self.mock_transport = mock.Mock(spec=NullTransport)
 
         # encode is called here since metrics.Batch is designed to be instantiated
         # by an instance of metrics.Client which encodes the namespace arg
-        self.batch = metrics.Batch(self.mock_transport, b"namespace")
+        self.batch = Batch(self.mock_transport, b"namespace")
 
     def test_context(self):
         with self.batch as b:
@@ -162,7 +163,7 @@ class BatchTests(unittest.TestCase):
 
     def test_make_counter(self):
         batch_counter = self.batch.counter("some_counter")
-        self.assertIsInstance(batch_counter, metrics.BatchCounter)
+        self.assertIsInstance(batch_counter, BatchCounter)
         expected_counter_name = b"namespace.some_counter"
         self.assertEqual(batch_counter.name, expected_counter_name)
         self.assertEqual(len(self.batch.counters), 1)
@@ -171,7 +172,7 @@ class BatchTests(unittest.TestCase):
     def test_get_counter_twice(self):
         counter_name = "some_counter"
         batch_counter = self.batch.counter(counter_name)
-        self.assertIsInstance(batch_counter, metrics.BatchCounter)
+        self.assertIsInstance(batch_counter, BatchCounter)
         expected_counter_name = b"namespace.some_counter"
         self.assertEqual(batch_counter.name, expected_counter_name)
 
@@ -201,16 +202,16 @@ class BatchTests(unittest.TestCase):
 
 class TimerTests(unittest.TestCase):
     def setUp(self):
-        self.transport = mock.Mock(spec=metrics.NullTransport)
+        self.transport = mock.Mock(spec=NullTransport)
 
     def test_init_with_tags(self):
         tags = {"test": "true"}
-        timer = metrics.Timer(self.transport, b"example", tags)
+        timer = Timer(self.transport, b"example", tags)
         self.assertEqual(timer.tags, tags)
 
     @mock.patch("time.time", autospec=True)
     def test_basic_operation(self, mock_time):
-        timer = metrics.Timer(self.transport, b"example")
+        timer = Timer(self.transport, b"example")
         self.assertEqual(timer.tags, {})
 
         with self.assertRaises(Exception):
@@ -234,7 +235,7 @@ class TimerTests(unittest.TestCase):
 
     @mock.patch("time.time", autospec=True)
     def test_context_manager(self, mock_time):
-        timer = metrics.Timer(self.transport, b"example")
+        timer = Timer(self.transport, b"example")
 
         mock_time.return_value = 1000
         with timer:
@@ -244,21 +245,21 @@ class TimerTests(unittest.TestCase):
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:3000|ms"))
 
     def test_send(self):
-        timer = metrics.Timer(self.transport, b"example")
+        timer = Timer(self.transport, b"example")
         timer.send(3.14)
         self.assertEqual(self.transport.send.call_count, 1)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:3140|ms"))
 
     def test_send_tagged(self):
         tags = {"test": "true"}
-        timer = metrics.Timer(self.transport, b"example", tags)
+        timer = Timer(self.transport, b"example", tags)
         timer.send(3.14)
         self.assertEqual(self.transport.send.call_count, 1)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example,test=true:3140|ms"))
 
     def test_update_tags(self):
         tags = {"test": "true"}
-        timer = metrics.Timer(self.transport, b"example", tags)
+        timer = Timer(self.transport, b"example", tags)
         new_tags = {"test2": "false"}
         timer.update_tags(new_tags)
         self.assertNotEqual(timer.tags, new_tags)
@@ -266,25 +267,25 @@ class TimerTests(unittest.TestCase):
 
 class CounterTests(unittest.TestCase):
     def setUp(self):
-        self.transport = mock.Mock(spec=metrics.NullTransport)
+        self.transport = mock.Mock(spec=NullTransport)
 
     def test_incr(self):
-        counter = metrics.Counter(self.transport, b"example")
+        counter = Counter(self.transport, b"example")
         self.assertIsNone(counter.tags)
 
         counter.increment()
         self.assertEqual(self.transport.send.call_count, 1)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:1|c"))
 
-        counter.increment(delta=10)
+        counter.increment(value=10)
         self.assertEqual(self.transport.send.call_count, 2)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:10|c"))
 
-        counter.increment(delta=-20)
+        counter.increment(value=-20)
         self.assertEqual(self.transport.send.call_count, 3)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:-20|c"))
 
-        counter.increment(delta=2, sample_rate=0.5)
+        counter.increment(value=2, sample_rate=0.5)
         self.assertEqual(self.transport.send.call_count, 4)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:2|c|@0.5"))
 
@@ -295,14 +296,14 @@ class CounterTests(unittest.TestCase):
         self.assertEqual(self.transport.send.call_count, 1)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:-1|c"))
 
-        counter.decrement(delta=3)
+        counter.decrement(value=3)
         self.assertEqual(self.transport.send.call_count, 2)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example:-3|c"))
 
     def test_send_tagged(self):
         tags = {"test": "true"}
         counter = metrics.Counter(self.transport, b"example", tags)
-        counter.send(delta=2, sample_rate=0.5)
+        counter.send(value=2, sample_rate=0.5)
         self.assertEqual(self.transport.send.call_args, mock.call(b"example,test=true:2|c|@0.5"))
 
 

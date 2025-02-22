@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 from pymemcache.client.base import PooledClient
-from redis import StrictRedis
+from redis import Redis
 
 from baseplate.lib import ratelimit
 from baseplate.lib.ratelimit.backends import RateLimitBackend
@@ -35,7 +35,7 @@ class RateLimiterTests(unittest.TestCase):
 class RedisRateLimitBackendTest(unittest.TestCase):
     def setUp(self):
         self.amount = 10
-        redis = mock.create_autospec(StrictRedis)
+        redis = mock.create_autospec(Redis)
         pipeline_context = redis.pipeline.return_value.__enter__.return_value
         pipeline_context.execute.return_value = [self.amount]
         self.ratelimit_backend = RedisRateLimitBackend(redis)

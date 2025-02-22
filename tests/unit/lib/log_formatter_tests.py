@@ -1,4 +1,5 @@
 from opentelemetry import trace
+from opentelemetry.sdk.trace import NonRecordingSpan
 from opentelemetry.test.test_base import TestBase
 
 from baseplate.lib import log_formatter
@@ -33,7 +34,7 @@ class CustomJSONFormatterTests(TestBase):
             trace_flags=trace.TraceFlags(trace.TraceFlags.SAMPLED),
             is_remote=False,
         )
-        parent = trace.set_span_in_context(trace.NonRecordingSpan(ctx), context)
+        parent = trace.set_span_in_context(NonRecordingSpan(ctx), context)
 
         with tracer.start_as_current_span("testing trace ID logging", context=parent) as otelspan:
             assert otelspan.is_recording()
