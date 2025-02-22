@@ -9,6 +9,7 @@ from typing import BinaryIO
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import BadVersionError, NoNodeError
+from sqlalchemy import exc
 
 from baseplate.lib.live_data.zookeeper import zookeeper_client_from_config
 from baseplate.lib.secrets import secrets_store_from_config
