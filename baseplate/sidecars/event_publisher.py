@@ -8,6 +8,7 @@ import logging
 from typing import Any, Optional
 
 import requests
+from sqlalchemy import create_engine
 
 from baseplate import __version__ as baseplate_version
 from baseplate.lib import config, metrics

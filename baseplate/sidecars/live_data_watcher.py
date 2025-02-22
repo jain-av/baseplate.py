@@ -21,6 +21,7 @@ from botocore.client import (  # type: ignore
 from botocore.exceptions import EndpointConnectionError  # type: ignore
 from kazoo.client import KazooClient
 from kazoo.protocol.states import ZnodeStat
+from sqlalchemy import create_engine
 
 from baseplate.lib import config
 from baseplate.lib.live_data.zookeeper import zookeeper_client_from_config
@@ -256,19 +257,21 @@ def main() -> NoReturn:
     cfg = config.parse_config(
         watcher_config,
         {
-            "nodes": config.DictOf(
-                {
-                    "source": config.String,
-                    "dest": config.String,
-                    "owner": config.Optional(config.UnixUser),
-                    "group": config.Optional(config.UnixGroup),
-                    "mode": config.Optional(config.Integer(base=8), default=0o400),  # type: ignore
-                }
+            "nodes": config.ListOf(
+                config.DictOf(
+                    {
+                        "source": config.String,
+                        "dest": config.String,
+                        "owner": config.Optional(config.UnixUser),
+                        "group": config.Optional(config.UnixGroup),
+                        "mode": config.Optional(config.Integer(base=8), default=0o400),  # type: ignore
+                    }
+                )
             )
         },
     )
     # pylint: disable=maybe-no-member
-    nodes = cfg.nodes.values()
+    nodes = cfg.nodes
 
     secrets = secrets_store_from_config(watcher_config, timeout=30)
     zookeeper = zookeeper_client_from_config(secrets, watcher_config, read_only=True)
@@ -277,7 +280,3 @@ def main() -> NoReturn:
         watch_zookeeper_nodes(zookeeper, nodes)
     finally:
         zookeeper.stop()
-
-
-if __name__ == "__main__":
-    main()

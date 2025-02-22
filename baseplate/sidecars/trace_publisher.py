@@ -5,6 +5,8 @@ import urllib.parse
 from typing import Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from requests.sessions import Session
 
 from baseplate import __version__ as baseplate_version
 from baseplate.lib import config, metrics
@@ -50,9 +52,9 @@ class ZipkinPublisher:
         retry_limit: int = RETRY_LIMIT_DEFAULT,
         num_conns: int = 5,
     ):
-        adapter = requests.adapters.HTTPAdapter(pool_connections=num_conns, pool_maxsize=num_conns)
+        adapter = HTTPAdapter(pool_connections=num_conns, pool_maxsize=num_conns)
         parsed_url = urllib.parse.urlparse(zipkin_api_url)
-        self.session = requests.Session()
+        self.session = Session()
         self.session.headers["User-Agent"] = (
             f"baseplate.py-{self.__class__.__name__}/{baseplate_version}"
         )

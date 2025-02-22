@@ -147,7 +147,7 @@ class VaultClientFactory:
         self.role = role
         self.auth_type = auth_type
         self.mount_point = mount_point
-        self.client: Optional[VaultClient] = None
+        self.client: Optional["VaultClient"] = None
 
     def _make_session(self) -> requests.Session:
         session = requests.Session()
@@ -262,6 +262,10 @@ class VaultClientFactory:
 
     def get_client(self) -> "VaultClient":
         """Get an authenticated client, reauthenticating if not cached."""
+        if self.client and self.client.is_about_to_expire:
+            self.client.close()
+            self.client = None
+
         if self.client and self.client.is_about_to_expire:
             self.client.close()
             self.client = None
