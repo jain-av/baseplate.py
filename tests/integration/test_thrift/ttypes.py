@@ -91,7 +91,7 @@ class ExpectedException(TException):
         return not (self == other)
 
 
-class ExampleStruct(object):
+class ExampleStruct:
     """
     Attributes:
      - string_field
