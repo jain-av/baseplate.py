@@ -9,6 +9,6 @@ def hello_world(request):
 
 def make_wsgi_app(app_config):
     configurator = Configurator(settings=app_config)
-    configurator.add_route("hello_world", "/", request_method="GET")
+    configurator.add_route("hello_world", "/", methods=["GET"])
     configurator.scan()
     return configurator.make_wsgi_app()
