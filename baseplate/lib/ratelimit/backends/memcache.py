@@ -1,4 +1,4 @@
-from pymemcache.client import PooledClient
+from pymemcache.client.pool import PooledClient
 
 from baseplate import Span
 from baseplate.clients import ContextFactory
@@ -54,7 +54,7 @@ class MemcacheRateLimitBackend(RateLimitBackend):
         current_bucket = _get_current_bucket(interval)
         key = self.prefix + key + current_bucket
         ttl = interval * 2
-        self.memcache.add(key, 0, expire=ttl)
+        self.memcache.add(key, 0, exptime=ttl)
         # `incr` will return None if we experience a delay after the prior
         # `add` call that causes the ttl to expire. We default to `amount` in
         # this case.
