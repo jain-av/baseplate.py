@@ -250,7 +250,6 @@ def _keepalive_client(
 
         return ret
 
-
 @pytest.mark.parametrize(
     (
         "delay_between_requests",

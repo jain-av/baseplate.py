@@ -28,8 +28,8 @@ class ClusterPoolFromConfigTests(unittest.TestCase):
     def test_basic_url(self):
         pool = cluster_pool_from_config({"rediscluster.url": redis_cluster_url})
 
-        self.assertEqual(pool.nodes.startup_nodes[0]["host"], "redis-cluster-node")
-        self.assertEqual(pool.nodes.startup_nodes[0]["port"], "7000")
+        self.assertEqual(pool.connection_pool.nodes.startup_nodes[0]["host"], "redis-cluster-node")
+        self.assertEqual(pool.connection_pool.nodes.startup_nodes[0]["port"], "7000")
 
     def test_timeouts(self):
         pool = cluster_pool_from_config(
@@ -39,7 +39,7 @@ class ClusterPoolFromConfigTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(pool.timeout, 30)
+        self.assertEqual(pool.connection_pool.timeout, 30)
 
     def test_max_connections(self):
         pool = cluster_pool_from_config(
@@ -49,31 +49,31 @@ class ClusterPoolFromConfigTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(pool.max_connections, 300)
+        self.assertEqual(pool.connection_pool.max_connections, 300)
 
     def test_max_connections_default(self):
         # https://github.com/Grokzen/redis-py-cluster/issues/435
         pool = cluster_pool_from_config({"rediscluster.url": f"redis://{redis_endpoint}/0"})
 
-        self.assertEqual(pool.max_connections, 50)
+        self.assertEqual(pool.connection_pool.max_connections, 50)
 
     def test_kwargs_passthrough(self):
         pool = cluster_pool_from_config(
             {"rediscluster.url": f"redis://{redis_endpoint}/0"}, example="present"
         )
 
-        self.assertEqual(pool.connection_kwargs["example"], "present")
+        self.assertEqual(pool.connection_pool.connection_kwargs["example"], "present")
 
     def test_alternate_prefix(self):
         pool = cluster_pool_from_config(
             {"noodle.url": f"redis://{redis_endpoint}/0"}, prefix="noodle."
         )
-        self.assertEqual(pool.nodes.startup_nodes[0]["host"], "redis-cluster-node")
-        self.assertEqual(pool.nodes.startup_nodes[0]["port"], "7000")
+        self.assertEqual(pool.connection_pool.nodes.startup_nodes[0]["host"], "redis-cluster-node")
+        self.assertEqual(pool.connection_pool.nodes.startup_nodes[0]["port"], "7000")
 
     def test_only_primary_available(self):
         pool = cluster_pool_from_config({"rediscluster.url": f"redis://{redis_endpoint}/0"})
-        node_list = [pool.get_node_by_slot(slot=1, read_command=False) for _ in range(0, 100)]
+        node_list = [pool.connection_pool.get_node_by_slot(slot=1, read_command=False) for _ in range(0, 100)]
 
         # The primary is on port 7000 so that's the only port we expect to see
         self.assertTrue(all(node["port"] == 7000 for node in node_list))
@@ -81,7 +81,7 @@ class ClusterPoolFromConfigTests(unittest.TestCase):
     def test_read_from_replicas(self):
         pool = cluster_pool_from_config({"rediscluster.url": f"redis://{redis_endpoint}/0"})
 
-        node_list = [pool.get_node_by_slot(slot=1, read_command=True) for _ in range(0, 100)]
+        node_list = [pool.connection_pool.get_node_by_slot(slot=1, read_command=True) for _ in range(0, 100)]
 
         # Both replicas and primary are available, so we expect to see some non-primaries here
         self.assertTrue(any(node["port"] != 7000 for node in node_list))
@@ -137,7 +137,8 @@ class RedisClusterIntegrationTests(RedisIntegrationTestCase):
 
     def test_pipeline(self):
         with self.server_span:
-            with self.context.rediscluster.pipeline("foo") as pipeline:
+            pipe = self.context.rediscluster.pipeline("foo")
+            with pipe as pipeline:
                 pipeline.set("foo", "bar")
                 pipeline.get("foo")
                 pipeline.get("foo")
@@ -212,7 +213,8 @@ class RedisClusterIntegrationTests(RedisIntegrationTestCase):
                     "redis_database": "0",
                 }
                 with self.server_span:
-                    with self.context.rediscluster.pipeline("foo") as pipeline:
+                    pipe = self.context.rediscluster.pipeline("foo")
+                    with pipe as pipeline:
                         pipeline.set("foo", "bar")
                         pipeline.get("foo")
                         pipeline.get("foo")

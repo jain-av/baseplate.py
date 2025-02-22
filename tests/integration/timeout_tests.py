@@ -3,6 +3,7 @@ import pytest
 
 from baseplate import Baseplate
 from baseplate.observers.timeout import ServerTimeout, TimeoutBaseplateObserver
+from sqlalchemy import create_engine
 
 
 def _create_baseplate_object(timeout: str):

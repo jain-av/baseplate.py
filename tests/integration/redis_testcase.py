@@ -4,6 +4,8 @@ import redis
 
 import baseplate.clients.redis as baseplate_redis
 from baseplate import Baseplate
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from . import TestBaseplateObserver, get_endpoint_or_skip_container
 

@@ -12,7 +12,7 @@ try:
 except ImportError:
     raise unittest.SkipTest("pymemcache is not installed")
 try:
-    from redis import ConnectionPool
+    from redis import ConnectionPool, Redis
 
     from baseplate.lib.ratelimit.backends.redis import RedisRateLimitBackendContextFactory
 except ImportError:
@@ -63,7 +63,8 @@ class RateLimiterBackendTests:
 class RedisRateLimitBackendTests(RateLimiterBackendTests, unittest.TestCase):
     def setUp(self):
         pool = ConnectionPool(host=redis_endpoint.address.host, port=redis_endpoint.address.port)
-        self.backend_factory = RedisRateLimitBackendContextFactory(pool)
+        redis_client = Redis(connection_pool=pool)
+        self.backend_factory = RedisRateLimitBackendContextFactory(redis_client)
         super().setUp()
 
 

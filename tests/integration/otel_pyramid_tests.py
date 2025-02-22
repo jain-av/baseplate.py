@@ -10,8 +10,6 @@ from pyramid.response import Response
 from baseplate import Baseplate
 from baseplate.lib.propagator_redditb3_http import RedditB3HTTPFormat
 
-from . import FakeEdgeContextFactory
-
 propagate.set_global_textmap(
     CompositePropagator([RedditB3HTTPFormat(), TraceContextTextMapPropagator()])
 )

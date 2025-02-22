@@ -7,7 +7,7 @@ except ImportError:
     raise unittest.SkipTest("pymemcache is not installed")
 
 from baseplate import Baseplate, LocalSpan, ServerSpan
-from baseplate.clients.memcache import MemcacheClient, MonitoredMemcacheConnection, make_keys_str
+from baseplate.clients.memcache import MemcacheClient, MonitoredMemcacheConnection
 
 from . import TestBaseplateObserver, get_endpoint_or_skip_container
 
@@ -27,7 +27,7 @@ class MemcacheIntegrationTests(unittest.TestCase):
 
     def test_simple(self):
         with self.server_span:
-            self.context.memcache.get("whatever")
+            self.context.memcache.get(b"whatever")
 
         server_span_observer = self.baseplate_observer.get_only_child()
         span_observer = server_span_observer.get_only_child()
@@ -39,7 +39,7 @@ class MemcacheIntegrationTests(unittest.TestCase):
     def test_error(self):
         with self.server_span:
             with self.assertRaises(MemcacheClientError):
-                self.context.memcache.cas("key", b"value", b"whatever")
+                self.context.memcache.cas(b"key", b"value", b"whatever")
 
         server_span_observer = self.baseplate_observer.get_only_child()
         span_observer = server_span_observer.get_only_child()
@@ -176,9 +176,9 @@ class MakeKeysStrTests(unittest.TestCase):
     def test_bytes(self):
         expected_string = "key_1,key_2"
         keys = [b"key_1", b"key_2"]
-        self.assertEqual(expected_string, make_keys_str(keys))
+        self.assertEqual(expected_string, MemcacheClient.make_keys_str(keys))
 
     def test_str(self):
         expected_string = "key_1,key_2"
         keys = ["key_1", "key_2"]
-        self.assertEqual(expected_string, make_keys_str(keys))
+        self.assertEqual(expected_string, MemcacheClient.make_keys_str(keys))

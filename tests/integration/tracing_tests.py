@@ -13,6 +13,8 @@ from baseplate.observers.tracing import (
 try:
     import webtest
     from pyramid.config import Configurator
+    from sqlalchemy import StaticPool
+    from sqlalchemy.orm import Session
 
     from baseplate.frameworks.pyramid import BaseplateConfigurator, StaticTrustHandler
 except ImportError:

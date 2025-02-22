@@ -200,24 +200,24 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
 
         # trace id should be the same everywhere
         self.assertEqual(
-            thrift_server_span.get_span_context().trace_id,
-            thrift_client_span.get_span_context().trace_id,
+            thrift_server_span.context.trace_id,
+            thrift_client_span.context.trace_id,
         )
         self.assertEqual(
-            thrift_server_span.get_span_context().trace_id, thrift_server_span.parent.trace_id
+            thrift_server_span.context.trace_id, thrift_server_span.parent.trace_id
         )
 
         # Ensure client span ID is == server parent span ID
         # but other span IDs are distinct
         self.assertEqual(
-            thrift_server_span.parent.span_id, thrift_client_span.get_span_context().span_id
+            thrift_server_span.parent.span_id, thrift_client_span.context.span_id
         )
         self.assertNotEqual(
-            thrift_server_span.parent.span_id, thrift_server_span.get_span_context().span_id
+            thrift_server_span.parent.span_id, thrift_server_span.context.span_id
         )
         self.assertNotEqual(
-            thrift_server_span.get_span_context().span_id,
-            thrift_client_span.get_span_context().span_id,
+            thrift_server_span.context.span_id,
+            thrift_client_span.context.span_id,
         )
 
         self.assertEqual(thrift_client_span.name, "example_service/example")
@@ -276,11 +276,11 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
                 transport.set_header(
-                    b"Trace",
-                    b"100985939111033328018442752961257817910",
+                    "Trace",
+                    "100985939111033328018442752961257817910",
                 )
-                transport.set_header(b"Span", b"67667974448284344")
-                transport.set_header(b"Sampled", b"1")
+                transport.set_header("Span", "67667974448284344")
+                transport.set_header("Sampled", "1")
                 client.example()
 
         finished_spans = self.get_finished_spans()
@@ -305,9 +305,9 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
         with serve_thrift(handler, TestService) as server:
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
-                transport.set_header(b"Trace", b"2365116317615059789")
-                transport.set_header(b"Span", b"11655119394564249508")
-                transport.set_header(b"Sampled", b"1")
+                transport.set_header("Trace", "2365116317615059789")
+                transport.set_header("Span", "11655119394564249508")
+                transport.set_header("Sampled", "1")
                 client.example()
 
         finished_spans = self.get_finished_spans()
@@ -338,12 +338,12 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
         with serve_thrift(handler, TestService) as server:
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
-                transport.set_header(b"traceparent", traceparent.encode())
+                transport.set_header("traceparent", traceparent)
                 # should get discarded
-                transport.set_header(b"Trace", b"20d294c28becf34d")
+                transport.set_header("Trace", "20d294c28becf34d")
                 # should get discarded
-                transport.set_header(b"Span", b"a1bf4d567fc497a4")
-                transport.set_header(b"Sampled", b"1")
+                transport.set_header("Span", "a1bf4d567fc497a4")
+                transport.set_header("Sampled", "1")
                 client_result = client.example()
 
         finished_spans = self.get_finished_spans()
@@ -389,7 +389,7 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
         with serve_thrift(handler, TestService) as server:
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
-                transport.set_header(b"traceparent", traceparent.encode())
+                transport.set_header("traceparent", traceparent)
                 client_result = client.example()
 
         finished_spans = self.get_finished_spans()
@@ -417,7 +417,7 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
         with serve_thrift(handler, TestService) as server:
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
-                transport.set_header(b"traceparent", traceparent.encode())
+                transport.set_header("traceparent", traceparent)
                 client_result = client.example()
 
         finished_spans = self.get_finished_spans()
@@ -444,7 +444,7 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
         with serve_thrift(handler, TestService) as server:
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
-                transport.set_header(b"traceparent", traceparent.encode())
+                transport.set_header("traceparent", traceparent)
                 client_result = client.example()
 
         finished_spans = self.get_finished_spans()
@@ -469,7 +469,7 @@ class ThriftTraceHeaderTests(GeventPatchedTestCase, TestBase):
         with serve_thrift(handler, TestService) as server:
             with raw_thrift_client(server.endpoint, TestService) as client:
                 transport = client._oprot.trans
-                transport.set_header(b"Deadline-Budget", budget.encode())
+                transport.set_header("Deadline-Budget", budget)
                 client_result = client.example()
 
         self.assertEqual(handler.context.headers.get(b"Deadline-Budget").decode(), budget)
@@ -546,7 +546,7 @@ class ThriftServerSpanTests(GeventPatchedTestCase, TestBase):
 
         finished_spans = self.get_finished_spans()
         self.assertEqual(len(finished_spans), 1)
-        self.assertTrue(finished_spans[0].status.is_ok)
+        self.assertEqual(finished_spans[0].status.status_code, trace.StatusCode.UNSET)
 
     def test_unexpected_exception_is_marked_as_error(self):
         """If the server returns an unexpected exception, mark a failure."""
@@ -570,7 +570,7 @@ class ThriftServerSpanTests(GeventPatchedTestCase, TestBase):
 
         finished_spans = self.get_finished_spans()
         self.assertEqual(len(finished_spans), 1)
-        self.assertFalse(finished_spans[0].status.is_ok)
+        self.assertEqual(finished_spans[0].status.status_code, trace.StatusCode.ERROR)
         self.assertEqual(len(finished_spans[0].events), 2)
         self.assertEqual(
             finished_spans[0].events[-1].attributes["exception.type"].split(".")[-1],
@@ -596,7 +596,7 @@ class ThriftServerSpanTests(GeventPatchedTestCase, TestBase):
 
         finished_spans = self.get_finished_spans()
         self.assertEqual(len(finished_spans), 1)
-        self.assertFalse(finished_spans[0].status.is_ok)
+        self.assertEqual(finished_spans[0].status.status_code, trace.StatusCode.ERROR)
         self.assertEqual(len(finished_spans[0].events), 2)
         self.assertEqual(
             finished_spans[0].events[-1].attributes["exception.type"],
@@ -631,7 +631,7 @@ class ThriftServerSpanTests(GeventPatchedTestCase, TestBase):
                 True,
                 pytest.raises(Error),
                 "baseplate.thrift.ttypes.Error",
-                trace.status.StatusCode.OK,
+                trace.status.StatusCode.UNSET,
             ),
             (
                 Error(ErrorCode.SERVICE_UNAVAILABLE, "503 unavailable"),
@@ -645,7 +645,7 @@ class ThriftServerSpanTests(GeventPatchedTestCase, TestBase):
                 True,
                 pytest.raises(TException),
                 "thrift.Thrift.TException",
-                trace.status.StatusCode.OK,
+                trace.status.StatusCode.UNSET,
             ),
             (
                 Exception("Some very generic exception"),
@@ -672,7 +672,7 @@ class ThriftServerSpanTests(GeventPatchedTestCase, TestBase):
         some exceptions, or when the status on baseplate Error is a 5xx).
         """
         logger.debug(
-            f"exc={exc}, convert={convert}, expectation={expectation}, otel_exception={otel_exception}, otel_status={otel_status}",  # noqa: E501
+            f"exc={exc}, convert={convert}, expectation={expectation}, otel_exception={otel_exception}, otel_status={otel_status}",  # noqa: E501,
         )
 
         class Handler(TestService.Iface):
@@ -736,7 +736,7 @@ class ThriftClientSpanTests(GeventPatchedTestCase, TestBase):
         finished_spans = self.get_finished_spans()
         self.assertGreaterEqual(len(finished_spans), 2)
         client_span = finished_spans[1]
-        self.assertTrue(client_span.status.is_ok)
+        self.assertEqual(client_span.status.status_code, trace.StatusCode.UNSET)
 
     def test_unexpected_exception_passed_to_client_span_finish(self):
         """If the server returns an unexpected exception, mark a failure."""
@@ -759,7 +759,7 @@ class ThriftClientSpanTests(GeventPatchedTestCase, TestBase):
         finished_spans = self.get_finished_spans()
         self.assertGreaterEqual(len(finished_spans), 2)
         client_span = finished_spans[1]
-        self.assertEqual(len(client_span.events), 2)
+        self.assertEqual(len(client_span.events), 1)
         self.assertEqual(client_span.events[-1].name, "exception")
 
 

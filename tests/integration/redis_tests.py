@@ -45,7 +45,7 @@ class RedisIntegrationTests(RedisIntegrationTestCase):
 
     def test_error(self):
         with self.server_span:
-            with self.assertRaises(redis.ResponseError):
+            with self.assertRaises(redis.exceptions.ResponseError):
                 self.context.redis.execute_command("crazycommand")
 
         server_span_observer = self.baseplate_observer.get_only_child()
