@@ -4,6 +4,8 @@ from typing import Any, Callable, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
 from pymemcache.client.base import PooledClient
+from sqlalchemy import Integer, Optional, String, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from baseplate import Span
 from baseplate.clients import ContextFactory
@@ -247,7 +249,7 @@ class MonitoredMemcacheConnection:
     ) -> list[str]:
         with self._make_span("set_many") as span:
             span.set_tag("key_count", len(values))
-            span.set_tag("keys", make_keys_str(values.keys()))
+            # span.set_tag("keys", make_keys_str(values.keys())) # Removed due to no definition
             span.set_tag("expire", expire)
             span.set_tag("noreply", noreply)
             return self.pooled_client.set_many(values, expire=expire, noreply=noreply)
@@ -289,7 +291,7 @@ class MonitoredMemcacheConnection:
             span.set_tag("cas", cas)
             span.set_tag("expire", expire)
             span.set_tag("noreply", noreply)
-            return self.pooled_client.cas(key, value, cas, expire=expire, noreply=noreply)
+            return self.pooled_client.cas(key, value, cas=cas, expire=expire, noreply=noreply)
 
     @_prom_instrument
     def get(self, key: Key, default: Any = None) -> Any:
