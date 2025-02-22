@@ -17,7 +17,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
 
         self.checker.visit_assign(assign_node_a)
         self.checker.visit_call(call_node_b)
-        self.assertAddsMessages(
+        self.assert_adds_messages(
             pylint.testutils.MessageTest(msg_id="database-query-string-format", node=call_node_b)
         )
 
@@ -31,7 +31,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
 
         self.checker.visit_assign(assign_node_a)
         self.checker.visit_call(call_node_b)
-        self.assertAddsMessages(
+        self.assert_adds_messages(
             pylint.testutils.MessageTest(msg_id="database-query-string-format", node=call_node_b)
         )
 
@@ -43,7 +43,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         )
 
         self.checker.visit_call(call_node_a)
-        self.assertAddsMessages(
+        self.assert_adds_messages(
             pylint.testutils.MessageTest(msg_id="database-query-string-format", node=call_node_a)
         )
 
@@ -55,7 +55,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         )
 
         self.checker.visit_call(call_node_a)
-        self.assertAddsMessages(
+        self.assert_adds_messages(
             pylint.testutils.MessageTest(msg_id="database-query-string-format", node=call_node_a)
         )
 
@@ -67,7 +67,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_assign(assign_node_a)
             self.checker.visit_call(call_node_b)
 
@@ -78,7 +78,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_call(call_node_a)
 
     def test_ignores_no_argument(self):
@@ -88,7 +88,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_call(call_node_a)
 
     def test_variable_reset(self):
@@ -100,7 +100,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_assign(assign_node_a)
             self.checker.visit_assign(assign_node_b)
             self.checker.visit_call(call_node_c)
@@ -118,7 +118,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_assign(assign_node_a)
             self.checker.leave_functiondef(func_node)
             self.checker.visit_assign(assign_node_b)
@@ -136,7 +136,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_assign(assign_node_a)
             self.checker.leave_classdef(class_node)
             self.checker.visit_assign(assign_node_b)
@@ -155,7 +155,7 @@ class TestNoCQLStringFormatChecker(pylint.testutils.CheckerTestCase):
         """
         )
 
-        with self.assertNoMessages():
+        with self.assert_no_messages():
             self.checker.visit_assign(assign_node_a)
             self.checker.leave_module(mod_node)
             self.checker.visit_assign(assign_node_b)
