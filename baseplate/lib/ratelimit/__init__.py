@@ -1,4 +1,4 @@
-from baseplate.lib.ratelimit.ratelimit import (
+from baseplate.ratelimit import (
     RateLimiter,
     RateLimiterContextFactory,
     RateLimitExceededException,
