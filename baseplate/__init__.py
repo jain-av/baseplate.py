@@ -8,6 +8,293 @@ from typing import Any, Callable, NamedTuple, Optional
 
 import gevent.monkey
 from pkg_resources import DistributionNotFound, get_distribution
+from sqlalchemy import __version__
+from baseplate.lib import UnknownCallerError, config, get_calling_module_name, metrics
+
+
+logger = logging.getLogger(__name__)
+
+
+class BaseplateObserver:
+    """Interface for an observer that watches Baseplate."""
+
+    def on_server_span_created(self, context: "RequestContext", server_span: "ServerSpan") -> None:
+        """Do something when a server span is created.
+
+        :py:class:`Baseplate` calls this when a new request begins.
+
+        :param context: The :py:class:`~baseplate.RequestContext` for this
+            request.
+        :param server_span: The span representing this request.
+
+        """
+        raise NotImplementedError
+
+
+_ExcInfo = tuple[Optional[type[BaseException]], Optional[BaseException], Optional[TracebackType]]
+
+
+class SpanObserver:
+    """Interface for an observer that watches a span."""
+
+    def on_start(self) -> None:
+        """Do something when the observed span is started."""
+
+    def on_set_tag(self, key: str, value: Any) -> None:
+        """Do something when a tag is set on the observed span."""
+
+    def on_incr_tag(self, key: str, delta: float) -> None:
+        """Do something when a tag value is incremented on the observed span."""
+
+    def on_log(self, name: str, payload: Any) -> None:
+        """Do something when a log entry is added to the span."""
+
+    def on_finish(self, exc_info: Optional[_ExcInfo]) -> None:
+        """Do something when the observed span is finished.
+
+        :param exc_info: If the span ended because of an exception, the
+            exception info. Otherwise, :py:data:`None`.
+
+        """
+
+    def on_child_span_created(self, span: "Span") -> None:
+        """Do something when a child span is created.
+
+        :py:class:`SpanObserver` objects call this when a new child span is
+        created.
+
+        :param span: The new child span.
+
+        """
+
+
+class ServerSpanObserver(SpanObserver):
+    """Interface for an observer that watches the server span."""
+
+
+class TraceInfo(NamedTuple):
+    """Trace context for a span.
+
+    If this request was made at the behest of an upstream service, the upstream
+    service should have passed along trace information. This class is used for
+    collecting the trace context and passing it along to the server span.
+
+    """
+
+    #: The ID of the whole trace. This will be the same for all downstream requests.
+    trace_id: str
+
+    #: The ID of the parent span, or None if this is the root span.
+    parent_id: Optional[str]
+
+    #: The ID of the current span. Should be unique within a trace.
+    span_id: str
+
+    #: True if this trace was selected for sampling. Will be propagated to child spans.
+    sampled: Optional[bool]
+
+    #: A bit field of extra flags about this trace.
+    flags: Optional[int]
+
+    @classmethod
+    def new(cls) -> "TraceInfo":
+        """Generate IDs for a new initial server span.
+
+        This span has no parent and has a random ID. It cannot be correlated
+        with any upstream requests.
+
+        """
+        trace_id = str(random.getrandbits(64))
+        return cls(trace_id=trace_id, parent_id=None, span_id=trace_id, sampled=None, flags=None)
+
+    @classmethod
+    def from_upstream(
+        cls,
+        trace_id: str,
+        parent_id: Optional[str],
+        span_id: str,
+        sampled: Optional[bool],
+        flags: Optional[int],
+    ) -> "TraceInfo":
+        """Build a TraceInfo from individual headers.
+
+        :param trace_id: The ID of the trace.
+        :param parent_id: The ID of the parent span.
+        :param span_id: The ID of this span within the tree.
+        :param sampled: Boolean flag to determine request sampling.
+        :param flags: Bit flags for communicating feature flags downstream
+
+        :raises: :py:exc:`ValueError` if any of the values are inappropriate.
+
+        """
+        if trace_id is None:
+            raise ValueError("invalid trace_id")
+
+        if span_id is None:
+            raise ValueError("invalid span_id")
+
+        if sampled is not None and not isinstance(sampled, bool):
+            raise ValueError("invalid sampled value")
+
+        if flags is not None:
+            if not 0 <= flags < 2**64:
+                raise ValueError("invalid flags value")
+
+        return cls(trace_id, parent_id, span_id, sampled, flags)
+
+
+class RequestContext:
+    """The request context object.
+
+    The context object is passed into each request handler by the framework
+    you're using. In some cases (e.g. Pyramid) the request object will also
+    inherit from another base class and carry extra framework-specific
+    information.
+
+    Clients and configuration added to the context via
+    :py:meth:`~baseplate.Baseplate.configure_context` or
+    :py:meth:`~baseplate.Baseplate.add_to_context` will be available as an
+    attribute on this object.  To take advantage of Baseplate's automatic
+    monitoring, any interactions with external services should be done through
+    these clients.
+
+    """
+
+    def __init__(
+        self,
+        context_config: dict[str, Any],
+        prefix: Optional[str] = None,
+        span: Optional["Span"] = None,
+        wrapped: Optional["RequestContext"] = None,
+    ):
+        self.__context_config = context_config
+        self.__prefix = prefix
+        self.__wrapped = wrapped
+
+        # the context and span reference eachother (unfortunately) so we can't
+        # construct 'em both with references from the start. however, we can
+        # guarantee that during the valid life of a span, there will be a
+        # reference. so we fake it here and say "trust us".
+        #
+        # this would be much cleaner with a different API but this is where we are.
+        self.span: Span = span  # type: ignore
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            config_item = self.__context_config[name]
+        except KeyError:
+            try:
+                return getattr(self.__wrapped, name)
+            except AttributeError:
+                raise AttributeError(
+                    f"{repr(self.__class__.__name__)} object has no attribute {repr(name)}"
+                ) from None
+
+        if self.__prefix:
+            full_name = f"{self.__prefix}.{name}"
+        else:
+            full_name = name
+
+        if isinstance(config_item, dict):
+            obj = RequestContext(context_config=config_item, prefix=full_name, span=self.span)
+        elif hasattr(config_item, "make_object_for_context"):
+            obj = config_item.make_object_for_context(full_name, self.span)
+        else:
+            obj = config_item
+
+        setattr(self, name, obj)
+        return obj
+
+    # this is just here for type checking
+    # pylint: disable=useless-super-delegation
+    def __setattr__(self, name: str, value: Any) -> None:
+        super().__setattr__(name, value)
+
+    def clone(self) -> "RequestContext":
+        return RequestContext(
+            context_config=self.__context_config,
+            prefix=self.__prefix,
+            span=self.span,
+            wrapped=self,
+        )
+
+
+class ReusedContextObjectError(Exception):
+    def __init__(self) -> None:
+        super().__init__(
+            "Context objects cannot be re-used. See https://baseplate.readthedocs.io/en/latest/guide/faq.html#what-do-i-do-about-context-objects-cannot-be-re-used"
+        )
+
+
+class Baseplate:
+    """The core of the Baseplate framework.
+
+    This class coordinates monitoring and tracing of service calls made to
+    and from this service. See :py:mod:`baseplate.frameworks` for how to
+    integrate it with the application framework you are using.
+
+    """
+
+    def __init__(self, app_config: Optional[config.RawConfig] = None) -> None:
+        """Initialize the core observability framework.
+
+        :param app_config: The raw configuration dictionary for your
+            application as supplied by :program:`baseplate-serve` or
+            :program:`baseplate-script`. In addition to allowing
+            framework-level configuration (described next), if this is supplied
+            you do not need to pass the configuration again when calling
+            :py:meth:`configure_observers` or :py:meth:`configure_context`.
+
+        Baseplate services can identify themselves to downstream services in
+        requests. The name a service identifies as defaults to the Python
+        module the :py:class:`~baseplate.Baseplate` object is instantiated in.
+        To override the default, make sure you are passing in an `app_config`
+        and configure the name in your INI file:
+
+        .. code-block:: ini
+
+            [app:main]
+            baseplate.service_name = foo_service
+
+            ...
+
+        """
+        self.observers: list[BaseplateObserver] = []
+        self._metrics_client: Optional[metrics.Client] = None
+        self._context_config: dict[str, Any] = {}
+        self._app_config = app_config or {}
+
+        self.service_name = self._app_config.get("baseplate.service_name")
+        if not self.service_name:
+            try:
+                self.service_name = get_calling_module_name()
+            except UnknownCallerError:
+                # this happens e.g. when instantiating Baseplate() in a shell
+                pass
+
+    def register(self, observer: BaseplateObserver) -> None:
+        """Register an observer.
+
+        :param observer: An observer.
+
+        """
+        self.observers.append(observer)
+
+    # pylint: disable=cyclic-import
+    def configure_observers(self) -> None:
+        """Configure diagnostics observers based on application configuration.
+
+import logging
+import os
+import random
+from collections.abc import Iterator  # pylint: disable=import-error
+from contextlib import contextmanager
+from types import TracebackType
+from typing import Any, Callable, NamedTuple, Optional
+
+import gevent.monkey
+from pkg_resources import DistributionNotFound, get_distribution
+from sqlalchemy import create_engine
 
 from baseplate.lib import UnknownCallerError, config, get_calling_module_name, metrics
 
