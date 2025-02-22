@@ -29,7 +29,7 @@ class NoRelativeImportsChecker(BaseChecker):
                 node=node,
                 args=(
                     "." * node.level + node.modname,
-                    self.module.relative_to_absolute_name(node.modname, node.level),
+                    self.module.absolute_name(node.modname, node.level),
                 ),
             )
 
