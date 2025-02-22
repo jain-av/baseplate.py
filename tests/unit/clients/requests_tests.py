@@ -18,7 +18,7 @@ from baseplate.lib.prometheus_metrics import getHTTPSuccessLabel
 def baseplate_session(request):
     yield BaseplateSession(
         adapter=mock.MagicMock(),
-        name="session_name",
+        session_name="session_name",
         span=mock.MagicMock(),
         client_name=request.param,
     )
@@ -66,7 +66,7 @@ class TestBaseplateSessionProm:
             "http_method": req.method.lower(),
             "http_client_name": baseplate_session.client_name
             if baseplate_session.client_name is not None
-            else baseplate_session.name,
+            else baseplate_session.session_name,
         }
 
         http_success = "true"

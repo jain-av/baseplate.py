@@ -21,6 +21,7 @@ from baseplate.clients.redis import (
     pool_from_config,
 )
 from baseplate.lib.config import ConfigurationError
+from redis import Redis, ConnectionPool
 
 
 class DummyConnection:
@@ -80,7 +81,9 @@ class TestMonitoredRedisConnection:
 
     @pytest.fixture
     def connection_pool(self, app_config, connection):
-        yield pool_from_config(app_config=app_config, prefix="redis.", **connection)
+        redis_url = app_config["redis.url"]
+        connection_kwargs = connection.get("connection_kwargs", {})
+        return ConnectionPool.from_url(url=redis_url, **connection_kwargs)
 
     @pytest.fixture
     def context(self):
@@ -92,18 +95,18 @@ class TestMonitoredRedisConnection:
 
     @pytest.fixture
     def monitored_redis_connection(self, span, connection_pool):
+        redis_client = Redis(connection_pool=connection_pool)
         yield MonitoredRedisConnection(
-            "redis_context_name", span, connection_pool, redis_client_name="test_client"
+            "redis_context_name", span, redis_client, redis_client_name="test_client"
         )
 
     def test_execute_command_exc_redis_err(
         self, monitored_redis_connection, expected_labels, app_config
     ):
-        monitored_redis_connection.connection_pool = pool_from_config(
-            app_config=app_config, client_name="test_client"
-        )
+        redis_url = app_config["redis.url"]
+        monitored_redis_connection._redis = Redis.from_url(url=redis_url)
         with pytest.raises(ConnectionError):  # ConnectionError inherits from RedisError
-            monitored_redis_connection.execute_command("some_command")
+            monitored_redis_connection._redis.execute_command("some_command")
         assert REGISTRY.get_sample_value(f"{ACTIVE_REQUESTS._name}", expected_labels) == 0
         expected_labels["redis_success"] = "false"
         assert (
@@ -115,7 +118,7 @@ class TestMonitoredRedisConnection:
         assert REGISTRY.get_sample_value(f"{REQUESTS_TOTAL._name}_total", expected_labels) == 1
 
     def test_execute_command(self, monitored_redis_connection, expected_labels):
-        monitored_redis_connection.execute_command("some_command")
+        monitored_redis_connection._redis.execute_command("some_command")
         # assert [i for i in REGISTRY.collect()] == ""
         assert REGISTRY.get_sample_value(f"{ACTIVE_REQUESTS._name}", expected_labels) == 0
         expected_labels["redis_success"] = "true"
@@ -143,9 +146,8 @@ class TestMonitoredRedisConnection:
             ) as active_dec_spy_method:
                 mock_manager.attach_mock(active_dec_spy_method, "dec")
 
-                monitored_redis_connection.pipeline("test").set("hello", 42).set(
-                    "goodbye", 23
-                ).execute()
+                with monitored_redis_connection._redis.pipeline("test") as pipe:
+                    pipe.set("hello", 42).set("goodbye", 23).execute()
                 labels = {**active_labels, "redis_success": "true"}
                 assert REGISTRY.get_sample_value(f"{REQUESTS_TOTAL._name}_total", labels) == 1.0, (
                     "Unexpected value for REQUESTS_TOTAL metric. Expected one 'pipeline' command"
@@ -188,32 +190,32 @@ class TestMonitoredRedisConnection:
             ) as active_dec_spy_method:
                 mock_manager.attach_mock(active_dec_spy_method, "dec")
 
-                monitored_redis_connection.connection_pool = pool_from_config(
-                    app_config=app_config, client_name="test_client"
-                )
-                with pytest.raises(ConnectionError):
-                    monitored_redis_connection.pipeline("test").set("hello", 42).set(
-                        "goodbye", 23
-                    ).execute()
-                labels = {**active_labels, "redis_success": "false"}
-                assert REGISTRY.get_sample_value(f"{REQUESTS_TOTAL._name}_total", labels) == 1.0, (
-                    "Unexpected value for REQUESTS_TOTAL metric. Expected one 'pipeline' command"
-                )
-                assert (
-                    REGISTRY.get_sample_value(
-                        f"{LATENCY_SECONDS._name}_bucket", {**labels, "le": "+Inf"}
-                    )
-                    == 1.0
-                ), "Expected one 'pipeline' latency request"
-                assert mock_manager.mock_calls == [
-                    mock.call.inc(),
-                    mock.call.dec(),
-                ], (
-                    "Instrumentation should increment and then decrement active requests exactly once"  # noqa: E501
-                )
-                assert REGISTRY.get_sample_value(ACTIVE_REQUESTS._name, active_labels) == 0.0, (
-                    "Should have 0 (and not None) active requests"
-                )
+        redis_url = app_config["redis.url"]
+        pool = ConnectionPool.from_url(url=redis_url)
+        redis_client = Redis(connection_pool=pool)
+        monitored_redis_connection._redis = redis_client
+        with pytest.raises(ConnectionError):
+            with monitored_redis_connection._redis.pipeline("test") as pipe:
+                pipe.set("hello", 42).set("goodbye", 23).execute()
+        labels = {**active_labels, "redis_success": "false"}
+        assert REGISTRY.get_sample_value(f"{REQUESTS_TOTAL._name}_total", labels) == 1.0, (
+            "Unexpected value for REQUESTS_TOTAL metric. Expected one 'pipeline' command"
+        )
+        assert (
+            REGISTRY.get_sample_value(
+                f"{LATENCY_SECONDS._name}_bucket", {**labels, "le": "+Inf"}
+            )
+            == 1.0
+        ), "Expected one 'pipeline' latency request"
+        assert mock_manager.mock_calls == [
+            mock.call.inc(),
+            mock.call.dec(),
+        ], (
+            "Instrumentation should increment and then decrement active requests exactly once"  # noqa: E501
+        )
+        assert REGISTRY.get_sample_value(ACTIVE_REQUESTS._name, active_labels) == 0.0, (
+            "Should have 0 (and not None) active requests"
+        )
 
 
 class TestPoolFromConfig:
@@ -223,10 +225,11 @@ class TestPoolFromConfig:
 
     def test_basic_url(self):
         pool = pool_from_config({"redis.url": "redis://localhost:1234/0"})
+        redis_client = Redis(connection_pool=pool)
 
-        assert pool.connection_kwargs["host"] == "localhost"
-        assert pool.connection_kwargs["port"] == 1234
-        assert pool.connection_kwargs["db"] == 0
+        assert redis_client.connection_pool.connection_kwargs["host"] == "localhost"
+        assert redis_client.connection_pool.connection_kwargs["port"] == 1234
+        assert redis_client.connection_pool.connection_kwargs["db"] == 0
 
     def test_timeouts(self):
         pool = pool_from_config(
@@ -236,14 +239,16 @@ class TestPoolFromConfig:
                 "redis.socket_connect_timeout": "300 milliseconds",
             }
         )
+        redis_client = Redis(connection_pool=pool)
 
-        assert pool.connection_kwargs["socket_timeout"] == 30
-        assert pool.connection_kwargs["socket_connect_timeout"] == 0.3
+        assert redis_client.connection_pool.connection_kwargs["socket_timeout"] == 30
+        assert redis_client.connection_pool.connection_kwargs["socket_connect_timeout"] == 0.3
 
     def test_kwargs_passthrough(self):
         pool = pool_from_config({"redis.url": "redis://localhost:1234/0"}, example="present")
+        redis_client = Redis(connection_pool=pool)
 
-        assert pool.connection_kwargs["example"] == "present"
+        assert redis_client.connection_pool.connection_kwargs["example"] == "present"
 
     def test_alternate_prefix(self):
         pool_from_config({"noodle.url": "redis://localhost:1234/0"}, prefix="noodle.")

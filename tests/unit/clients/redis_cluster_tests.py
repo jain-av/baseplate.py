@@ -116,7 +116,7 @@ class TestMonitoredRedisConnection:
     ):
         with pytest.raises(RedisClusterException):
             monitored_redis_connection.execute_command("some_command")
-        assert REGISTRY.get_sample_value(f"{ACTIVE_REQUESTS._name}", expected_labels) == 0
+        assert REGISTRY.get_sample_value(ACTIVE_REQUESTS._name, expected_labels) == 0
         expected_labels["redis_success"] = "false"
         assert (
             REGISTRY.get_sample_value(

@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 from prometheus_client import REGISTRY
+from sqlalchemy import Connection
 
 from baseplate.clients.kombu import (
     AMQP_PROCESSED_TOTAL,
@@ -88,7 +89,7 @@ def secrets():
 )
 def test_connection_from_config(app_config, kwargs, expectation, expected):
     with expectation:
-        connection = connection_from_config(app_config, prefix="rabbitmq.", **kwargs)
+        connection: Connection = connection_from_config(app_config, prefix="rabbitmq.", **kwargs)
     for attr, value in expected.items():
         assert getattr(connection, attr) == value
 

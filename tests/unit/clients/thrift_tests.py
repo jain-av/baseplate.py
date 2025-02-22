@@ -232,8 +232,10 @@ class TestThriftContextFactory:
             pool=pool,
             client_cls=Iface,
         )
-        context_factory.max_connections_gauge.clear()
-        context_factory.active_connections_gauge.clear()
+        # context_factory.max_connections_gauge.clear() # these objects no longer have clear methods
+        # context_factory.active_connections_gauge.clear()
+        context_factory.max_connections_gauge = None # instead of clear, just overwrite the objects
+        context_factory.active_connections_gauge = None
         yield context_factory
 
     def test_thrift_server_pool_prometheus_metrics(self, context_factory):
