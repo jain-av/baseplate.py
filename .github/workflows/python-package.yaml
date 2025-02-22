@@ -2,9 +2,9 @@ name: Lint and Test
 
 on:
   push:
-    branches: [ develop, v2.5, v2.5-unsupported-gcp ]
+    branches: [ develop ]
   pull_request:
-    branches: [ develop, v2.5, v2.5-unsupported-gcp ]
+    branches: [ develop ]
 
 jobs:
   lint-and-test:
