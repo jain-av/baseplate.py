@@ -74,14 +74,14 @@ class LoadFactoryTests(unittest.TestCase):
         factory = server._load_factory("package.module:callable", "default_name")
 
         self.assertEqual(import_module.call_args, mock.call("package.module"))
-        self.assertEqual(factory, import_module.return_value.callable)
+        self.assertEqual(factory, getattr(import_module.return_value, "callable"))
 
     @mock.patch("importlib.import_module", autospec=True)
     def test_default_name(self, import_module):
         factory = server._load_factory("package.module", "default_name")
 
         self.assertEqual(import_module.call_args, mock.call("package.module"))
-        self.assertEqual(factory, import_module.return_value.default_name)
+        self.assertEqual(factory, getattr(import_module.return_value, "default_name"))
 
 
 class CheckFnSignatureTests(unittest.TestCase):

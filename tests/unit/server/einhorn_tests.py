@@ -47,17 +47,19 @@ class EinhornWorkerTests(unittest.TestCase):
     def test_get_socket_count(self):
         self.assertEqual(einhorn.get_socket_count(), 2)
 
-    @mock.patch("socket.fromfd", autospec=True)
-    def test_get_socket(self, fromfd):
+    @mock.patch("socket.socket", autospec=True)
+    def test_get_socket(self, socket_mock):
+        fromfd_mock = socket_mock.fromfd
         sock = einhorn.get_socket()
-        fromfd.assert_called_with(5, socket.AF_INET, socket.SOCK_STREAM)
-        self.assertEqual(sock, fromfd.return_value)
+        fromfd_mock.assert_called_with(5, socket.AF_INET, socket.SOCK_STREAM)
+        self.assertEqual(sock, fromfd_mock.return_value)
 
-    @mock.patch("socket.fromfd", autospec=True)
-    def test_get_socket_unix(self, fromfd):
+    @mock.patch("socket.socket", autospec=True)
+    def test_get_socket_unix(self, socket_mock):
+        fromfd_mock = socket_mock.fromfd
         sock = einhorn.get_socket(1)
-        fromfd.assert_called_with(6, socket.AF_UNIX, socket.SOCK_STREAM)
-        self.assertEqual(sock, fromfd.return_value)
+        fromfd_mock.assert_called_with(6, socket.AF_UNIX, socket.SOCK_STREAM)
+        self.assertEqual(sock, fromfd_mock.return_value)
 
     def test_get_socket_out_of_bounds(self):
         with self.assertRaises(IndexError):
