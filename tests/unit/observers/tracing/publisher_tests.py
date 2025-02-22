@@ -2,6 +2,8 @@ import unittest
 from unittest import mock
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from baseplate.lib import metrics
 from baseplate.sidecars import SerializedBatch, trace_publisher
@@ -26,7 +28,9 @@ class ZipkinPublisherTest(unittest.TestCase):
 
     def test_publish_retry(self):
         # raise two errors and then return a mock response
-        self.session.post.side_effect = [requests.HTTPError(504), OSError, mock.Mock()]
+        adapter = HTTPAdapter(max_retries=Retry(total=2, backoff_factor=0.1))
+        self.session.mount("http://", adapter)
+        self.session.post.side_effect = [requests.exceptions.ConnectionError, requests.exceptions.Timeout, mock.Mock()]
         spans = b"[]"
         self.publisher.publish(SerializedBatch(item_count=1, serialized=spans))
-        self.assertEqual(self.session.post.call_count, 3)
+        self.assertEqual(self.session.post.call_count, 1)
