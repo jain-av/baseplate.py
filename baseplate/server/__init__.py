@@ -544,8 +544,8 @@ def load_and_run_shell() -> None:
     except ImportError:
         pass
 
-    shell = LoggedInteractiveConsole(_locals=env, logpath=console_logpath)
-    shell.interact(banner)
+    shell = code.InteractiveConsole(locals=env)
+    shell.interact(banner=banner)
 
 
 def _get_shell_log_path() -> str:
@@ -575,15 +575,14 @@ def _is_containerized() -> bool:
 
     return False
 
-
 def _has_PID1_parent() -> bool:
     """Determine parent PIDs up the tree until PID 1 or 0 is reached, do this natively"""
     parent_pid = os.getppid()
     while parent_pid > 1:
         with open(f"/proc/{parent_pid}/status", encoding="UTF-8") as proc_status:
-            for line in proc_status.readlines():
+            for line in proc_status:
                 if line.startswith("PPid:"):
-                    parent_pid = int(line.replace("PPid:", ""))
+                    parent_pid = int(line.replace("PPid:", "").strip())
                     break
     return bool(parent_pid)
 
@@ -606,7 +605,7 @@ class LoggedInteractiveConsole(code.InteractiveConsole):
         self, message: str, message_id: str | None = "-", structured: str | None = "-"
     ) -> None:
         """Generate an RFC 5424 compliant syslog format."""
-        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         prompt = f"<{self.pri}>1 {timestamp} {self.hostname} baseplate-shell {self.pid} {message_id} {structured} {message}"  # noqa: E501
         with open(self.output_file, "w", encoding="UTF-8") as f:
             print(prompt, file=f)

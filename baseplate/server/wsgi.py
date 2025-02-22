@@ -132,7 +132,7 @@ def make_server(server_config: dict[str, str], listener: socket.socket, app: Any
             "handler": config.Optional(config.String, default=None),
             "max_concurrency": config.Optional(config.Integer),
             "stop_timeout": config.Optional(
-                config.TimespanWithLegacyFallback, default=datetime.timedelta(seconds=10)
+                config.Timespan, default=datetime.timedelta(seconds=10)
             ),
         },
     )

@@ -11,7 +11,7 @@ def patch_stdlib_queues() -> None:
 
     import gevent.queue
 
-    monkey.patch_module(queue, gevent.queue, items=["Queue", "LifoQueue", "PriorityQueue"])
+    monkey.patch_module(queue, gevent.queue, items=["Queue", "SimpleQueue", "LifoQueue", "PriorityQueue"])
 
 
 def gevent_is_patched() -> bool:
