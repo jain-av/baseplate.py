@@ -14,6 +14,28 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
+# Conditional imports for SQLAlchemy 2.0 compatibility
+try:
+    from sqlalchemy import text, select
+    from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+    HAS_SQLALCHEMY_20 = True
+except ImportError:
+    # Fallback for SQLAlchemy 1.4 compatibility
+    HAS_SQLALCHEMY_20 = False
+    text = None
+    select = None
+    DeclarativeBase = None
+    Mapped = None
+    mapped_column = None
+
+# Import for legacy SQLAlchemy 1.4 declarative_base if needed
+try:
+    from sqlalchemy.ext.declarative import declarative_base
+    HAS_DECLARATIVE_BASE = True
+except ImportError:
+    HAS_DECLARATIVE_BASE = False
+    declarative_base = None
+
 from baseplate import Span, SpanObserver, _ExcInfo
 from baseplate.clients import ContextFactory
 from baseplate.lib import config, metrics
