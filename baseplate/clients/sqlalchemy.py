@@ -7,12 +7,23 @@ from time import perf_counter
 from typing import Any, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, ExceptionContext
 from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
+
+# SQLAlchemy 2.0 type annotations and modern patterns
+try:
+    from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+    from sqlalchemy import select
+except ImportError:
+    # Fallback for SQLAlchemy < 2.0
+    DeclarativeBase = None
+    Mapped = None
+    mapped_column = None
+    select = None
 
 from baseplate import Span, SpanObserver, _ExcInfo
 from baseplate.clients import ContextFactory
@@ -98,7 +109,7 @@ def engine_from_config(
     return create_engine(url, **kwargs)
 
 
-class SQLAlchemySession(config.Parser):
+class SQLAlchemySession(config.Parser["SQLAlchemySessionContextFactory"]):
     """Configure a SQLAlchemy Session.
 
     This is meant to be used with
@@ -110,11 +121,16 @@ class SQLAlchemySession(config.Parser):
 
     """
 
-    def __init__(self, secrets: SecretsStore | None = None, **kwargs: Any):
+    def __init__(self, secrets: SecretsStore | None = None, **kwargs: Any) -> None:
         self.secrets = secrets
         self.kwargs = kwargs
 
     def parse(self, key_path: str, raw_config: config.RawConfig) -> SQLAlchemySessionContextFactory:
+        """Parse configuration and create a SQLAlchemy session context factory.
+        
+        This method creates a properly typed SQLAlchemy session factory that
+        supports both SQLAlchemy 1.4 and 2.0 patterns.
+        """
         engine = engine_from_config(
             raw_config, secrets=self.secrets, prefix=f"{key_path}.", **self.kwargs
         )
@@ -122,6 +138,38 @@ class SQLAlchemySession(config.Parser):
 
 
 Parameters = Optional[Union[dict[str, Any], Sequence[Any]]]
+
+# Type aliases for SQLAlchemy 2.0 compatibility
+if typing.TYPE_CHECKING:
+    from sqlalchemy.sql import Executable
+    from sqlalchemy.engine import Result
+    
+    # Type aliases for modern SQLAlchemy patterns
+    SQLStatement = Union[str, Executable]
+    SQLResult = Result[Any]
+
+
+# Utility functions for SQLAlchemy 2.0 pattern compatibility
+def is_sqlalchemy_2_available() -> bool:
+    """Check if SQLAlchemy 2.0 features are available."""
+    return DeclarativeBase is not None and Mapped is not None
+
+
+def ensure_text_wrapped(statement: str | Any) -> Any:
+    """Ensure SQL statement is properly wrapped for SQLAlchemy 2.0.
+    
+    In SQLAlchemy 2.0, raw SQL strings should be wrapped with text().
+    This function provides a compatibility layer.
+    
+    Args:
+        statement: SQL statement string or already wrapped statement
+        
+    Returns:
+        Properly wrapped statement for execution
+    """
+    if isinstance(statement, str) and text is not None:
+        return text(statement)
+    return statement
 
 
 SAFE_TRACE_ID = re.compile("^[A-Za-z0-9_-]+$")
@@ -220,7 +268,8 @@ class SQLAlchemyEngineContextFactory(ContextFactory):
         batch.gauge("pool.in_use").replace(pool.checkedout())
         batch.gauge("pool.overflow").replace(max(pool.overflow(), 0))
 
-    def make_object_for_context(self, name: str, span: Span) -> Engine | Session:
+    def make_object_for_context(self, name: str, span: Span) -> Engine:
+        """Create an Engine object for the context with proper type annotations."""
         engine = self.engine.execution_options(context_name=name, server_span=span)
         return engine
 
@@ -332,6 +381,12 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
     """
 
     def make_object_for_context(self, name: str, span: Span) -> Session:
+        """Create a Session object for the context with proper type annotations.
+        
+        This method creates a SQLAlchemy Session that's compatible with both
+        SQLAlchemy 1.4 and 2.0 patterns. The session will support modern
+        execution patterns when SQLAlchemy 2.0 is available.
+        """
         engine = typing.cast(Engine, super().make_object_for_context(name, span))
         session = Session(bind=engine)
         span.register(SQLAlchemySessionSpanObserver(session))
@@ -339,10 +394,15 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
 
 
 class SQLAlchemySessionSpanObserver(SpanObserver):
-    """Automatically close the session at the end of each request."""
+    """Automatically close the session at the end of each request.
+    
+    This observer ensures proper session lifecycle management for both
+    SQLAlchemy 1.4 and 2.0 patterns.
+    """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session) -> None:
         self.session = session
 
     def on_finish(self, exc_info: _ExcInfo | None) -> None:
+        """Close the SQLAlchemy session when the span finishes."""
         self.session.close()
