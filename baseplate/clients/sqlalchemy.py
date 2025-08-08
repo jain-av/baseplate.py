@@ -7,11 +7,11 @@ from time import perf_counter
 from typing import Any, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, ExceptionContext
 from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import DeclarativeBase, Session
 from sqlalchemy.pool import QueuePool
 
 from baseplate import Span, SpanObserver, _ExcInfo
