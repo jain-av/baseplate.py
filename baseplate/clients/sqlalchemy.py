@@ -7,7 +7,7 @@ from time import perf_counter
 from typing import Any, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, ExceptionContext
 from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
@@ -127,6 +127,72 @@ Parameters = Optional[Union[dict[str, Any], Sequence[Any]]]
 SAFE_TRACE_ID = re.compile("^[A-Za-z0-9_-]+$")
 
 
+class SessionWrapper:
+    """Wrapper around SQLAlchemy Session providing helper methods for text() wrapped queries.
+    
+    This wrapper adds SQLAlchemy 2.0 compatible helper methods while maintaining
+    backward compatibility with existing session usage patterns.
+    """
+
+    def __init__(self, session: Session):
+        self._session = session
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate all other attributes to the underlying session."""
+        return getattr(self._session, name)
+
+    def execute_text(self, sql: str, parameters: Parameters = None) -> Any:
+        """Execute a SQL statement wrapped with text() for SQLAlchemy 2.0 compatibility.
+        
+        Args:
+            sql: Raw SQL statement string
+            parameters: Optional parameters for the SQL statement
+            
+        Returns:
+            Result of the execution
+        """
+        return self._session.execute(text(sql), parameters)
+
+    def scalar_text(self, sql: str, parameters: Parameters = None) -> Any:
+        """Execute a SQL statement and return a scalar result.
+        
+        Args:
+            sql: Raw SQL statement string  
+            parameters: Optional parameters for the SQL statement
+            
+        Returns:
+            Scalar result of the execution
+        """
+        result = self._session.execute(text(sql), parameters)
+        return result.scalar()
+
+    def fetchall_text(self, sql: str, parameters: Parameters = None) -> list[Any]:
+        """Execute a SQL statement and return all results as a list.
+        
+        Args:
+            sql: Raw SQL statement string
+            parameters: Optional parameters for the SQL statement
+            
+        Returns:
+            List of all results
+        """
+        result = self._session.execute(text(sql), parameters)
+        return result.fetchall()
+
+    def fetchone_text(self, sql: str, parameters: Parameters = None) -> Any:
+        """Execute a SQL statement and return the first result.
+        
+        Args:
+            sql: Raw SQL statement string
+            parameters: Optional parameters for the SQL statement
+            
+        Returns:
+            First result or None
+        """
+        result = self._session.execute(text(sql), parameters)
+        return result.fetchone()
+
+
 class SQLAlchemyEngineContextFactory(ContextFactory):
     """SQLAlchemy core engine context factory.
 
@@ -220,7 +286,7 @@ class SQLAlchemyEngineContextFactory(ContextFactory):
         batch.gauge("pool.in_use").replace(pool.checkedout())
         batch.gauge("pool.overflow").replace(max(pool.overflow(), 0))
 
-    def make_object_for_context(self, name: str, span: Span) -> Engine | Session:
+    def make_object_for_context(self, name: str, span: Span) -> Engine | Session | SessionWrapper:
         engine = self.engine.execution_options(context_name=name, server_span=span)
         return engine
 
@@ -331,11 +397,12 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
 
     """
 
-    def make_object_for_context(self, name: str, span: Span) -> Session:
+    def make_object_for_context(self, name: str, span: Span) -> SessionWrapper:
         engine = typing.cast(Engine, super().make_object_for_context(name, span))
         session = Session(bind=engine)
+        wrapper = SessionWrapper(session)
         span.register(SQLAlchemySessionSpanObserver(session))
-        return session
+        return wrapper
 
 
 class SQLAlchemySessionSpanObserver(SpanObserver):
