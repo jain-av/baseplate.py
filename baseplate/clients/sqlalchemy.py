@@ -7,7 +7,7 @@ from time import perf_counter
 from typing import Any, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, ExceptionContext
 from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
@@ -222,7 +222,17 @@ class SQLAlchemyEngineContextFactory(ContextFactory):
 
     def make_object_for_context(self, name: str, span: Span) -> Engine | Session:
         engine = self.engine.execution_options(context_name=name, server_span=span)
+        # Add connection context helper methods for SQLAlchemy 2.0 patterns
+        engine._baseplate_connection_context = self._create_connection_context
         return engine
+
+    def _create_connection_context(self, engine: Engine) -> Connection:
+        """Create a connection context for modern SQLAlchemy 2.0 patterns.
+        
+        This provides proper connection handling that works with both
+        autocommit and transaction contexts in SQLAlchemy 2.0.
+        """
+        return engine.connect()
 
     # pylint: disable=unused-argument, too-many-arguments
     def on_before_execute(
@@ -334,15 +344,50 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
     def make_object_for_context(self, name: str, span: Span) -> Session:
         engine = typing.cast(Engine, super().make_object_for_context(name, span))
         session = Session(bind=engine)
+        # Add helper methods for SQLAlchemy 2.0 patterns
+        session._baseplate_execute_text = self._execute_text_statement
+        session._baseplate_connection_context = self._create_session_connection_context
         span.register(SQLAlchemySessionSpanObserver(session))
         return session
 
+    def _execute_text_statement(self, session: Session, statement: str, parameters: Parameters = None) -> Any:
+        """Execute a text statement with proper SQLAlchemy 2.0 patterns.
+        
+        This helper method wraps raw SQL strings with text() for SQLAlchemy 2.0
+        compatibility while maintaining backward compatibility.
+        """
+        return session.execute(text(statement), parameters)
+
+    def _create_session_connection_context(self, session: Session) -> Connection:
+        """Create a connection context from a session for SQLAlchemy 2.0 patterns.
+        
+        This provides access to the underlying connection for cases where
+        direct connection access is needed in SQLAlchemy 2.0 patterns.
+        """
+        return session.connection()
+
 
 class SQLAlchemySessionSpanObserver(SpanObserver):
-    """Automatically close the session at the end of each request."""
+    """Automatically close the session at the end of each request.
+    
+    Handles proper cleanup for both legacy and modern SQLAlchemy patterns,
+    including connection contexts that may be in use.
+    """
 
     def __init__(self, session: Session):
         self.session = session
 
     def on_finish(self, exc_info: _ExcInfo | None) -> None:
-        self.session.close()
+        try:
+            # Handle any uncommitted transaction state properly
+            # In SQLAlchemy 2.0, session.close() handles this automatically
+            # but we ensure backward compatibility
+            if self.session.in_transaction():
+                if exc_info is not None:
+                    # Roll back on exceptions to ensure clean state
+                    self.session.rollback()
+                # For successful completion, we don't auto-commit as that
+                # should be handled by application logic
+        finally:
+            # Always close the session to return connections to pool
+            self.session.close()
