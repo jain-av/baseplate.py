@@ -14,6 +14,13 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import DeclarativeBase, Session
 from sqlalchemy.pool import QueuePool
 
+# SQLAlchemy 2.0 compatibility imports
+try:
+    from sqlalchemy.orm import DeclarativeBase
+except ImportError:
+    # Fallback for SQLAlchemy < 2.0
+    DeclarativeBase = None
+
 from baseplate import Span, SpanObserver, _ExcInfo
 from baseplate.clients import ContextFactory
 from baseplate.lib import config, metrics
