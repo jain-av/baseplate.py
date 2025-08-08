@@ -7,12 +7,19 @@ from time import perf_counter
 from typing import Any, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, ExceptionContext
 from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
+
+# SQLAlchemy 2.0 compatibility imports
+try:
+    from sqlalchemy.orm import DeclarativeBase
+except ImportError:
+    # Fallback for SQLAlchemy < 2.0
+    DeclarativeBase = None
 
 from baseplate import Span, SpanObserver, _ExcInfo
 from baseplate.clients import ContextFactory
