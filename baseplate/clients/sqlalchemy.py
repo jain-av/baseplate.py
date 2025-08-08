@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import typing
+import warnings
 from collections.abc import Sequence  # pylint: disable=import-error
 from time import perf_counter
 from typing import Any, Optional, Union
@@ -13,6 +14,8 @@ from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
+from sqlalchemy.sql import Executable
+from sqlalchemy.sql.elements import TextClause
 
 from baseplate import Span, SpanObserver, _ExcInfo
 from baseplate.clients import ContextFactory
@@ -127,6 +130,38 @@ Parameters = Optional[Union[dict[str, Any], Sequence[Any]]]
 SAFE_TRACE_ID = re.compile("^[A-Za-z0-9_-]+$")
 
 
+def _is_raw_sql_string(statement: Any) -> bool:
+    """Check if a statement is a raw SQL string that should use text()."""
+    return isinstance(statement, str) and not isinstance(statement, (TextClause, Executable))
+
+
+def _warn_raw_sql_usage(statement: str) -> None:
+    """Issue deprecation warning for raw SQL string usage."""
+    warnings.warn(
+        "Passing raw SQL strings to execute() is deprecated and will be removed "
+        "in SQLAlchemy 2.0. Use text() to wrap SQL strings: "
+        f"execute(text('{statement[:50]}...')) instead of execute('{statement[:50]}...')",
+        DeprecationWarning,
+        stacklevel=6,
+    )
+
+
+class _DeprecationWarningEngine:
+    """Engine wrapper that issues deprecation warnings for legacy usage patterns."""
+    
+    def __init__(self, engine: Engine):
+        self._engine = engine
+        
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._engine, name)
+        
+    def execute(self, statement: Any, parameters: Parameters = None) -> Any:
+        """Override execute to check for raw SQL strings."""
+        if _is_raw_sql_string(statement):
+            _warn_raw_sql_usage(statement)
+        return self._engine.execute(statement, parameters)
+
+
 class SQLAlchemyEngineContextFactory(ContextFactory):
     """SQLAlchemy core engine context factory.
 
@@ -222,7 +257,7 @@ class SQLAlchemyEngineContextFactory(ContextFactory):
 
     def make_object_for_context(self, name: str, span: Span) -> Engine | Session:
         engine = self.engine.execution_options(context_name=name, server_span=span)
-        return engine
+        return _DeprecationWarningEngine(engine)
 
     # pylint: disable=unused-argument, too-many-arguments
     def on_before_execute(
@@ -309,6 +344,27 @@ class SQLAlchemyEngineContextFactory(ContextFactory):
         )
 
 
+class _DeprecationWarningSession(Session):
+    """Session wrapper that issues deprecation warnings for legacy usage patterns."""
+    
+    def query(self, *entities: Any, **kwargs: Any) -> Any:
+        """Override query method to issue deprecation warning."""
+        warnings.warn(
+            "Session.query() is deprecated and will be removed in SQLAlchemy 2.0. "
+            "Use Session.execute(select(...)) instead. "
+            "For example: session.execute(select(Model)).scalars().all()",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return super().query(*entities, **kwargs)
+        
+    def execute(self, statement: Any, parameters: Parameters = None, **kwargs: Any) -> Any:
+        """Override execute to check for raw SQL strings."""
+        if _is_raw_sql_string(statement):
+            _warn_raw_sql_usage(statement)
+        return super().execute(statement, parameters, **kwargs)
+
+
 class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
     """SQLAlchemy ORM session context factory.
 
@@ -333,7 +389,7 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
 
     def make_object_for_context(self, name: str, span: Span) -> Session:
         engine = typing.cast(Engine, super().make_object_for_context(name, span))
-        session = Session(bind=engine)
+        session = _DeprecationWarningSession(bind=engine)
         span.register(SQLAlchemySessionSpanObserver(session))
         return session
 
