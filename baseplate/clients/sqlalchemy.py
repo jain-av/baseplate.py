@@ -2,17 +2,25 @@ from __future__ import annotations
 
 import re
 import typing
+import warnings
 from collections.abc import Sequence  # pylint: disable=import-error
 from time import perf_counter
 from typing import Any, Optional, Union
 
 from prometheus_client import Counter, Gauge, Histogram
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Connection, Engine, ExceptionContext
 from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
+
+# SQLAlchemy 2.0 compatibility imports
+try:
+    from sqlalchemy.orm import DeclarativeBase
+    SQLALCHEMY_2_0_AVAILABLE = True
+except ImportError:
+    SQLALCHEMY_2_0_AVAILABLE = False
 
 from baseplate import Span, SpanObserver, _ExcInfo
 from baseplate.clients import ContextFactory
@@ -309,6 +317,46 @@ class SQLAlchemyEngineContextFactory(ContextFactory):
         )
 
 
+class SQLAlchemy20Session(Session):
+    """Extended Session class with SQLAlchemy 2.0 helper methods.
+    
+    Provides convenience methods for modern SQLAlchemy 2.0 patterns while
+    maintaining backward compatibility.
+    """
+    
+    def execute_text(self, sql: str, parameters: dict[str, Any] | None = None) -> Any:
+        """Execute raw SQL using text() wrapper for SQLAlchemy 2.0 compatibility.
+        
+        :param sql: Raw SQL statement
+        :param parameters: Optional parameters for the statement
+        :return: Result from execution
+        """
+        if not SQLALCHEMY_2_0_AVAILABLE:
+            warnings.warn(
+                "Using execute_text() without SQLAlchemy 2.0. Consider upgrading for better support.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+        return self.execute(text(sql), parameters)
+    
+    def execute_legacy_sql(self, sql: str, parameters: dict[str, Any] | None = None) -> Any:
+        """Execute raw SQL in legacy mode (without text() wrapper).
+        
+        This method provides a deprecation warning and should be migrated to execute_text().
+        
+        :param sql: Raw SQL statement  
+        :param parameters: Optional parameters for the statement
+        :return: Result from execution
+        """
+        warnings.warn(
+            f"Using legacy SQL execution pattern. Migrate to execute_text() or use text() wrapper. "
+            f"This will be removed in future versions.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.execute(sql, parameters)
+
+
 class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
     """SQLAlchemy ORM session context factory.
 
@@ -331,18 +379,53 @@ class SQLAlchemySessionContextFactory(SQLAlchemyEngineContextFactory):
 
     """
 
-    def make_object_for_context(self, name: str, span: Span) -> Session:
+    def make_object_for_context(self, name: str, span: Span) -> SQLAlchemy20Session:
         engine = typing.cast(Engine, super().make_object_for_context(name, span))
-        session = Session(bind=engine)
+        
+        # Create session following SQLAlchemy 2.0 best practices
+        # Use autobegin=True for better 2.0 compatibility
+        session = SQLAlchemy20Session(
+            bind=engine,
+            autobegin=True,  # SQLAlchemy 2.0 style session lifecycle
+            expire_on_commit=True,  # Ensure objects are properly expired
+        )
+        
+        # Register observer for proper cleanup
         span.register(SQLAlchemySessionSpanObserver(session))
         return session
 
 
 class SQLAlchemySessionSpanObserver(SpanObserver):
-    """Automatically close the session at the end of each request."""
+    """Automatically handle session lifecycle at the end of each request.
+    
+    Follows SQLAlchemy 2.0 best practices for session cleanup and transaction handling.
+    """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: SQLAlchemy20Session):
         self.session = session
 
     def on_finish(self, exc_info: _ExcInfo | None) -> None:
-        self.session.close()
+        """Clean up session following SQLAlchemy 2.0 best practices.
+        
+        This ensures proper transaction handling and connection cleanup.
+        """
+        try:
+            if exc_info is not None:
+                # Roll back any pending transaction on error
+                if self.session.in_transaction():
+                    self.session.rollback()
+            else:
+                # For successful requests, ensure any pending transaction is handled
+                # In SQLAlchemy 2.0, sessions should explicitly manage transactions
+                if self.session.in_transaction():
+                    # Don't auto-commit; let the application handle commits explicitly
+                    # This follows 2.0 best practices of explicit transaction control
+                    pass
+        except Exception:
+            # If there's an error during cleanup, ensure we still close the session
+            # to prevent connection leaks
+            pass
+        finally:
+            # Always close the session to return connections to the pool
+            # This is compatible with both 1.4 and 2.0
+            self.session.close()
