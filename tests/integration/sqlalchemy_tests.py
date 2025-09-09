@@ -1,10 +1,10 @@
 import unittest
 
 try:
-    from sqlalchemy import Column, Integer, String
+    from sqlalchemy import Column, Integer, String, text, select, update, delete
     from sqlalchemy.dialects.sqlite import BOOLEAN
     from sqlalchemy.exc import OperationalError, StatementError
-    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped
 except ImportError:
     raise unittest.SkipTest("sqlalchemy is not installed")
 
@@ -18,7 +18,8 @@ from baseplate.clients.sqlalchemy import (
 
 from . import TestBaseplateObserver
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 
 class TestObject(Base):
