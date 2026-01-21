@@ -50,7 +50,7 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
         True if processing was successful, False otherwise
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             source = f.read()
     except Exception as e:
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
@@ -131,8 +131,11 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
     try:
         ast.parse(modified_source)
     except SyntaxError as e:
-        print(f"Syntax validation failed after comment removal in {file_path}: {e}", file=sys.stderr)
-        print(f"Skipping file to prevent breaking Python syntax.", file=sys.stderr)
+        print(
+            f"Syntax validation failed after comment removal in {file_path}: {e}",
+            file=sys.stderr,
+        )
+        print("Skipping file to prevent breaking Python syntax.", file=sys.stderr)
         return False
 
     if comments_removed == 0:
@@ -160,7 +163,7 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
             f.write(modified_source)
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 verify_source = f.read()
             ast.parse(verify_source)
         except SyntaxError as e:
@@ -171,7 +174,10 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
                     shutil.copy2(backup_path, file_path)
                     print(f"Successfully rolled back {file_path}", file=sys.stderr)
                 except Exception as rollback_error:
-                    print(f"CRITICAL: Rollback failed for {file_path}: {rollback_error}", file=sys.stderr)
+                    print(
+                        f"CRITICAL: Rollback failed for {file_path}: {rollback_error}",
+                        file=sys.stderr,
+                    )
             return False
 
         if verbose:
@@ -185,7 +191,10 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
                 shutil.copy2(backup_path, file_path)
                 print(f"Successfully rolled back {file_path}", file=sys.stderr)
             except Exception as rollback_error:
-                print(f"CRITICAL: Rollback failed for {file_path}: {rollback_error}", file=sys.stderr)
+                print(
+                    f"CRITICAL: Rollback failed for {file_path}: {rollback_error}",
+                    file=sys.stderr,
+                )
         return False
 
 
