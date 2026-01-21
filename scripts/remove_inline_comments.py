@@ -159,6 +159,11 @@ def process_path(path: Path, dry_run: bool = False, verbose: bool = False) -> tu
     """
     Process a file or directory, removing comments from Python files.
 
+    Uses pathlib.Path.rglob("*.py") to recursively discover all Python files
+    in the specified directory and its subdirectories. Includes all .py files
+    without exclusions. Progress tracking shows "Processing file X of Y" for
+    each file.
+
     Args:
         path: Path to file or directory to process
         dry_run: If True, don't modify files
@@ -185,14 +190,10 @@ def process_path(path: Path, dry_run: bool = False, verbose: bool = False) -> tu
         py_files = sorted(path.rglob('*.py'))
         total_files = len(py_files)
 
-        if verbose or not dry_run:
-            print(f"Found {total_files} Python file(s) in {path}")
+        print(f"Found {total_files} Python file(s) in {path}")
 
         for idx, py_file in enumerate(py_files, 1):
-            if verbose:
-                print(f"Processing file {idx}/{total_files}: {py_file}")
-            elif not dry_run:
-                print(f"Processing file {idx}/{total_files}: {py_file}")
+            print(f"Processing file {idx} of {total_files}: {py_file}")
 
             if remove_comments(py_file, dry_run, verbose):
                 successful += 1
