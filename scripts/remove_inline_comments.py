@@ -4,6 +4,7 @@
 import argparse
 import ast
 import io
+import shutil
 import sys
 import tokenize
 from pathlib import Path
@@ -38,7 +39,7 @@ def get_docstring_lines(source: str) -> Set[int]:
     return docstring_lines
 
 
-def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = False) -> bool:
+def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = False, no_backup: bool = False) -> bool:
     """
     Remove inline comments from a Python file while preserving docstrings.
 
@@ -46,6 +47,7 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
         file_path: Path to the Python file to process
         dry_run: If True, don't modify the file, just report what would be done
         verbose: If True, print detailed information about processing
+        no_backup: If True, skip creating backup files
 
     Returns:
         True if processing was successful, False otherwise
@@ -132,7 +134,8 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
     try:
         ast.parse(modified_source)
     except SyntaxError as e:
-        print(f"Syntax error after comment removal in {file_path}: {e}", file=sys.stderr)
+        print(f"Syntax validation failed after comment removal in {file_path}: {e}", file=sys.stderr)
+        print(f"Skipping file to prevent breaking Python syntax.", file=sys.stderr)
         return False
 
     if comments_removed == 0:
@@ -144,18 +147,52 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
         print(f"[DRY RUN] Would remove {comments_removed} comment(s) from {file_path}")
         return True
 
+    backup_path = None
+    if not no_backup:
+        backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+        try:
+            shutil.copy2(file_path, backup_path)
+            if verbose:
+                print(f"Created backup: {backup_path}")
+        except Exception as e:
+            print(f"Error creating backup for {file_path}: {e}", file=sys.stderr)
+            return False
+
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(modified_source)
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                verify_source = f.read()
+            ast.parse(verify_source)
+        except SyntaxError as e:
+            print(f"Syntax validation failed after writing {file_path}: {e}", file=sys.stderr)
+            if backup_path and backup_path.exists():
+                print(f"Rolling back changes from backup: {backup_path}", file=sys.stderr)
+                try:
+                    shutil.copy2(backup_path, file_path)
+                    print(f"Successfully rolled back {file_path}", file=sys.stderr)
+                except Exception as rollback_error:
+                    print(f"CRITICAL: Rollback failed for {file_path}: {rollback_error}", file=sys.stderr)
+            return False
+
         if verbose:
             print(f"Removed {comments_removed} comment(s) from {file_path}")
         return True
     except Exception as e:
         print(f"Error writing to {file_path}: {e}", file=sys.stderr)
+        if backup_path and backup_path.exists():
+            print(f"Rolling back changes from backup: {backup_path}", file=sys.stderr)
+            try:
+                shutil.copy2(backup_path, file_path)
+                print(f"Successfully rolled back {file_path}", file=sys.stderr)
+            except Exception as rollback_error:
+                print(f"CRITICAL: Rollback failed for {file_path}: {rollback_error}", file=sys.stderr)
         return False
 
 
-def process_path(path: Path, dry_run: bool = False, verbose: bool = False) -> tuple[int, int]:
+def process_path(path: Path, dry_run: bool = False, verbose: bool = False, no_backup: bool = False) -> tuple[int, int]:
     """
     Process a file or directory, removing comments from Python files.
 
@@ -168,6 +205,7 @@ def process_path(path: Path, dry_run: bool = False, verbose: bool = False) -> tu
         path: Path to file or directory to process
         dry_run: If True, don't modify files
         verbose: If True, print detailed information
+        no_backup: If True, skip creating backup files
 
     Returns:
         Tuple of (successful_count, failed_count)
@@ -179,7 +217,7 @@ def process_path(path: Path, dry_run: bool = False, verbose: bool = False) -> tu
         if path.suffix == '.py':
             if verbose:
                 print(f"Processing: {path}")
-            if remove_comments(path, dry_run, verbose):
+            if remove_comments(path, dry_run, verbose, no_backup):
                 successful += 1
             else:
                 failed += 1
@@ -195,7 +233,7 @@ def process_path(path: Path, dry_run: bool = False, verbose: bool = False) -> tu
         for idx, py_file in enumerate(py_files, 1):
             print(f"Processing file {idx} of {total_files}: {py_file}")
 
-            if remove_comments(py_file, dry_run, verbose):
+            if remove_comments(py_file, dry_run, verbose, no_backup):
                 successful += 1
             else:
                 failed += 1
@@ -238,6 +276,12 @@ Examples:
         help='Print detailed information about processing'
     )
 
+    parser.add_argument(
+        '--no-backup',
+        action='store_true',
+        help='Skip creating backup files (*.bak) before modifying originals'
+    )
+
     args = parser.parse_args()
 
     total_successful = 0
@@ -245,7 +289,7 @@ Examples:
 
     for path_str in args.paths:
         path = Path(path_str)
-        successful, failed = process_path(path, args.dry_run, args.verbose)
+        successful, failed = process_path(path, args.dry_run, args.verbose, args.no_backup)
         total_successful += successful
         total_failed += failed
 
