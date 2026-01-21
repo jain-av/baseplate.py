@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Script to remove inline comments from Python files while preserving docstrings."""
-
 import argparse
 import ast
 import io
@@ -295,9 +292,9 @@ Examples:
 
     print("\n" + "=" * 60)
     if args.dry_run:
-        print(f"DRY RUN SUMMARY:")
+        print(f"dry run summary:")
     else:
-        print(f"SUMMARY:")
+        print(f"summary:")
     print(f"  Successfully processed: {total_successful} file(s)")
     print(f"  Failed: {total_failed} file(s)")
     print("=" * 60)
