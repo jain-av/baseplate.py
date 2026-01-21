@@ -36,7 +36,12 @@ def get_docstring_lines(source: str) -> Set[int]:
     return docstring_lines
 
 
-def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = False, no_backup: bool = False) -> bool:
+def remove_comments(
+    file_path: Path,
+    dry_run: bool = False,
+    verbose: bool = False,
+    no_backup: bool = False,
+) -> bool:
     """
     Remove inline comments from a Python file while preserving docstrings.
 
@@ -198,7 +203,12 @@ def remove_comments(file_path: Path, dry_run: bool = False, verbose: bool = Fals
         return False
 
 
-def process_path(path: Path, dry_run: bool = False, verbose: bool = False, no_backup: bool = False) -> tuple[int, int]:
+def process_path(
+    path: Path,
+    dry_run: bool = False,
+    verbose: bool = False,
+    no_backup: bool = False,
+) -> tuple[int, int]:
     """
     Process a file or directory, removing comments from Python files.
 
@@ -301,9 +311,9 @@ Examples:
 
     print("\n" + "=" * 60)
     if args.dry_run:
-        print(f"dry run summary:")
+        print("dry run summary:")
     else:
-        print(f"summary:")
+        print("summary:")
     print(f"  Successfully processed: {total_successful} file(s)")
     print(f"  Failed: {total_failed} file(s)")
     print("=" * 60)
